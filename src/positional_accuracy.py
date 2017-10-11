@@ -255,9 +255,9 @@ def main(*argv):
                 score = get_score(mean)
                 null_percent = float(null_count) * 100.0 / float(len(df_current))
 
-                results.append((oid, mean, median,
+                results.append((oid, round(mean,1), median,
                                 mode, mmin, mmax,
-                                null_count, null_percent,
+                                null_count, round(null_percent,1),
                                 not_null_count,
                                 score, get_tier(score)))
                 del df_notnull

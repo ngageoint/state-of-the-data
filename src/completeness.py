@@ -202,9 +202,9 @@ def main(*argv):
             if geometry_type == "polygon":
                 before_val = geoms_before.getArea('GEODESIC','SQUAREKILOMETERS').sum()
                 after_val = geoms_after.getArea('GEODESIC','SQUAREKILOMETERS').sum()
-                grid_sdf.loc[[idx], 'TDS_DENSITY'] = before_val
-                grid_sdf.loc[[idx], 'COMP_DENSITY'] = after_val
-                grid_sdf.loc[[idx], 'DIFFERENCE'] = before_val - after_val
+                grid_sdf.loc[[idx], 'TDS_DENSITY'] = round(before_val,1)
+                grid_sdf.loc[[idx], 'COMP_DENSITY'] = round(after_val,1)
+                grid_sdf.loc[[idx], 'DIFFERENCE'] = round(before_val - after_val,1)
                 if after_val > 0:
                     score = get_score(ratio=before_val/after_val,
                             baseVal=before_val,
@@ -214,14 +214,14 @@ def main(*argv):
                 else:
                     score = get_score(0, before_val, after_val)
                     grid_sdf.loc[[idx], 'COMPLETENESS_VALUE'] = get_score(0, before_val, after_val)
-                results.append((oid, before_val, after_val, score,
-                        before_val - after_val))
+                results.append((oid, round(before_val,1), round(after_val,1), score,
+                        round(before_val - after_val,1)))
             elif geometry_type == "polyline":
                 before_val = geoms_before.getLength('GEODESIC','KILOMETERS').sum()
                 after_val = geoms_after.getLength('GEODESIC','KILOMETERS').sum()
-                grid_sdf.loc[[idx], 'TDS_DENSITY'] = before_val
-                grid_sdf.loc[[idx], 'COMP_DENSITY'] = after_val
-                grid_sdf.loc[[idx], 'DIFFERENCE'] = before_val - after_val
+                grid_sdf.loc[[idx], 'TDS_DENSITY'] = round(before_val,1)
+                grid_sdf.loc[[idx], 'COMP_DENSITY'] = round(after_val,1)
+                grid_sdf.loc[[idx], 'DIFFERENCE'] = round(before_val - after_val,1)
                 if after_val > 0:
                     score = get_score(ratio=before_val/after_val,
                             baseVal=before_val,
@@ -232,8 +232,8 @@ def main(*argv):
                 else:
                     score = get_score(0, before_val, after_val)
                     grid_sdf.loc[[idx], 'COMPLETENESS_VALUE'] = get_score(0, before_val, after_val)
-                results.append((oid, before_val, after_val, score,
-                        before_val - after_val))
+                results.append((oid, round(before_val,1), round(after_val,1), score,
+                        round(before_val - after_val,1)))
             else:
                 grid_sdf.loc[[idx], 'TDS_DENSITY'] = before_count
                 grid_sdf.loc[[idx], 'COMP_DENSITY'] = after_count

@@ -152,10 +152,10 @@ def process_source_lineage(grid_sdf, data_sdf, value_field=None):
                         ",".join(df_sub[value_field].unique().tolist()),
                         grp.index[0],
                         int(grp[0]),
-                        float(grp[0]) * 100.0 / float(len(df_sub)),
+                        round(float(grp[0]) * 100.0 / float(len(df_sub)),1),
                         grp.index[1],
                         int(grp[1]),
-                        float(grp[1]) * 100.0 / float(len(df_sub)),
+                        round(float(grp[1]) * 100.0 / float(len(df_sub)),1),
                     )
                 )
             elif len(grp) == 0:
@@ -176,7 +176,7 @@ def process_source_lineage(grid_sdf, data_sdf, value_field=None):
                         ",".join(df_sub[value_field].unique().tolist()),
                         grp.index[0],
                         int(grp[0]),
-                        float(grp[0]) * 100.0 / float(len(df_sub)),
+                        round(float(grp[0]) * 100.0 / float(len(df_sub)),1),
                         'None',
                         0,
                         float(0)

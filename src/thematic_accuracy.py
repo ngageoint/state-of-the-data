@@ -162,25 +162,25 @@ def create_grls(grid, population):
     """Creates a table to join to the grid dataset"""
     try:
         output_features = os.path.join(env.scratchGDB, "temp_grid")
-        reclass_gpt = os.path.join(env.scratchFolder, "rast_temp.tif")
+        reclass_population = os.path.join(env.scratchFolder, "rast_temp.tif")
         zonal_table = os.path.join(env.scratchGDB, 'zonalstats') #in_memory\\table"
-        if arcpy.Exists(reclass_gpt):
-            arcpy.Delete_management(reclass_gpt)
+        if arcpy.Exists(reclass_population):
+            arcpy.Delete_management(reclass_population)
         if arcpy.Exists(zonal_table):
             arcpy.Delete_management(zonal_table)
         output_features = arcpy.CopyFeatures_management(grid, output_features)[0]
         arcpy.AddMessage(output_features)
-        arcpy.AddMessage(reclass_gpt)
+        arcpy.AddMessage(reclass_population)
         arcpy.AddMessage(zonal_table)
 
 
         arcpy.gp.Reclassify_sa(population, "VALUE", "0 0;1 2;2 2;3 2;4 2;5 2;6 1;7 1;8 1;9 1;10 1", reclass_population, "DATA")
-        arcpy.gp.ZonalStatisticsAsTable_sa(output_features, "OBJECTID", reclass_gpt,zonal_table, "DATA", "ALL")
+        arcpy.gp.ZonalStatisticsAsTable_sa(output_features, "OBJECTID", reclass_population,zonal_table, "DATA", "ALL")
         #zonal_oid = arcpy.Describe(zonal_table).OIDFieldName
         arcpy.JoinField_management(output_features, "OBJECTID",
                                    zonal_table, "OBJECTID_1",
                                    "Count;Area;Min;Max;Range;Variety;Majority;Minority;Median;Mean;Std;Sum")
-        arcpy.Delete_management(reclass_gpt)
+        arcpy.Delete_management(reclass_population)
         return output_features
     except:
         line, filename, synerror = trace()
@@ -385,11 +385,11 @@ def main(*argv):
                 result = (oid,# OID
                           common,# median
                           common_count, # % common
-                          common_per,
+                          round(common_per,1),
                           min_val,#
-                          min_scale,#
+                          round(min_scale,1),#
                           max_val,#
-                          max_scale,#
+                          round(max_scale,1),#
                           count_2500,
                           count_5000,
                           count_12500,
@@ -399,15 +399,15 @@ def main(*argv):
                           count_250000,
                           count_500000,
                           count_1000000,
-                          count_2500*100/count,
-                          count_5000*100/count,
-                          count_12500*100/count,
-                          count_25000*100/count,
-                          count_50000*100/count,
-                          count_100000*100/count,
-                          count_250000*100/count,
-                          count_500000*100/count,
-                          count_1000000*100/count,
+                          round(count_2500*100/count,1),
+                          round(count_5000*100/count,1),
+                          round(count_12500*100/count,1),
+                          round(count_25000*100/count,1),
+                          round(count_50000*100/count,1),
+                          round(count_100000*100/count,1),
+                          round(count_250000*100/count,1),
+                          round(count_500000*100/count,1),
+                          round(count_1000000*100/count,1),
                           count,
                           str(MSP), #MISSION_PLANNING FIELD
                           SCORE_VALUE,#), # THEMATIC SCALE VALUE

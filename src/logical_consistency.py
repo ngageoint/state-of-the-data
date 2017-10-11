@@ -113,8 +113,8 @@ def extend_table(table, rows=None):
         dtypes = np.dtype(
             [
                 ('_ID', np.int),
-                ('MEAN_DEF_CNT', np.int32),
-                ('MEDIAN_DEF_CNT', np.float64),
+                ('MEAN_DEF_CNT', np.float64),
+                ('MEDIAN_DEF_CNT', np.int32),
                 ('MIN_DEF_CNT', np.int32),
                 ('MAX_DEF_CNT', np.int32),
                 #STandard deviation
@@ -189,19 +189,19 @@ def get_answers(oid, err, attr, feature_count):
 
     count = len(err)
     if count > 0:
-        mean_err = np.mean(err)
+        mean_err = round(np.mean(err),1)
         med_err = np.median(err)
         min_err = min(err)
         max_err = max(err)
         std_err = np.std(err)
         primary, primary_count, secondary, secondary_count = most_common(err)
         lc_score = get_lc_score(primary)
-        primary_percent = primary_count*100.0/count
-        secondary_percent = secondary_count*100.0/count
+        primary_percent = round(primary_count*100.0/count,1)
+        secondary_percent = round(secondary_count*100.0/count,1)
         if mean_err >0:
             pri_attr, pri_attr_count, sec_attr, sec_attr_count = most_common(attr)
-            pri_attr_percent = pri_attr_count*100.0/feature_count #count
-            sec_attr_percent = sec_attr_count*100.0/feature_count #count
+            pri_attr_percent = round(pri_attr_count*100.0/feature_count,1) #count
+            sec_attr_percent = round(sec_attr_count*100.0/feature_count,1) #count
         else:
             pri_attr = 'N/A'
             sec_attr = 'N/A'
