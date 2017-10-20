@@ -16,24 +16,46 @@ License: TBD
 -----------------------------------------------------------------------------"""
 
 from __future__ import division
+from __future__ import print_function
 import os
 import sys
 import numpy as np
 import pandas as pd
 import datetime
 from collections import Counter
-import geodataset as geomotion
-import arcpy
-from arcpy import env
-from arcpy import da
-if sys.version_info.major == 3:
-    from arcpy import mp as mapping
-else:
-    from arcpy import mapping
+
+#Using the ArcGIS API for Python
+import arcgis
+from arcgis.gis import GIS
+from arcgis.features import FeatureLayer
+from arcgis.geometry import filters
+from arcgis.geometry import Geometry
+
+#Import logic to create layer selection
+import create_selection_layers as csl
+import sotd_config as config
 
 non_std_date = '1901-1-1'
 non_std_year_str = non_std_date[0:4]
 non_std_year = int(non_std_date[0:4])
+
+FIELDS = ['DOM_DATE',
+        'DOM_DATE_CNT',
+        'DOM_DATE_PER',
+        'DOM_YEAR',
+        'DOM_YEAR_CNT',
+        'DOM_YEAR_PER',
+        'OLDEST_DATE',
+        'NEWEST_DATE',
+        'NO_DATE_CNT',
+        'NO_DATE_PER',
+        'PCT_2_YEAR',
+        'PCT_5_YEAR',
+        'PCT_10_YEAR',
+        'PCT_15_YEAR',
+        'PCT_15_PLUS_YEAR',
+        'FEATURE_CNT',
+        'CURRENCY_SCORE']
 
 #--------------------------------------------------------------------------
 class FunctionError(Exception):
@@ -75,118 +97,6 @@ def get_currency_score(year):
     return score
 
 #-------------------------------------------------------------------------------
-def extend_table(rows, table):
-    """
-    appends the results of the array to the existing table by an objectid
-    """
-    try:
-        dtypes = np.dtype(
-            [
-                ('_ID', np.int),
-                ('DOM_DATE', '|S48'),
-                ('DOM_DATE_CNT', np.int32),
-                ('DOM_DATE_PER', np.float64),
-                ('DOM_YEAR', np.int32),
-                ('DOM_YEAR_CNT', np.int32),
-                ('DOM_YEAR_PER', np.float64),
-                ('OLDEST_DATE', '|S1024'),
-                ('NEWEST_DATE', '|S1024'),
-                ('NO_DATE_CNT', np.int32),
-                ('NO_DATE_PER', np.float64),
-                ('PCT_2_YEAR', np.float64),
-                ('PCT_5_YEAR', np.float64),
-                ('PCT_10_YEAR', np.float64),
-                ('PCT_15_YEAR', np.float64),
-                ('PCT_15_PLUS_YEAR', np.float64),
-                ('FEATURE_CNT', np.int32),
-                ('CURRENCY_SCORE', np.int32)
-            ]
-        )
-        array = np.array(rows, dtypes)
-        da.ExtendTable(table, "OID@", array, "_ID", False)
-        return table
-    except:
-        line, filename, synerror = trace()
-        raise FunctionError(
-                {
-                "function": "",
-                "line": line,
-                "filename": filename,
-                "synerror": synerror,
-                "arc" : str(arcpy.GetMessages(2))
-                }
-                )
-#--------------------------------------------------------------------------
-def grid_fields(grid):
-    """
-    Adds fields to a given polygon grid.
-    """
-    try:
-        dtypes = np.dtype(
-            [
-                ('_ID', np.int),
-                ('DOM_DATE', '|S48'),
-                ('DOM_DATE_CNT', np.int32),
-                ('DOM_DATE_PER', np.float64),
-                ('DOM_YEAR', np.int32),
-                ('DOM_YEAR_CNT', np.int32),
-                ('DOM_YEAR_PER', np.float64),
-                ('OLDEST_DATE', '|S1024'),
-                ('NEWEST_DATE', '|S1024'),
-                ('NO_DATE_CNT', np.int32),
-                ('NO_DATE_PER', np.float64),
-                ('PCT_2_YEAR', np.float64),
-                ('PCT_5_YEAR', np.float64),
-                ('PCT_10_YEAR', np.float64),
-                ('PCT_15_YEAR', np.float64),
-                ('PCT_15_PLUS_YEAR', np.float64),
-                ('FEATURE_CNT', np.int32),
-                ('CURRENCY_SCORE', np.int32)
-            ]
-        )
-        array = np.array([], dtypes)
-        da.ExtendTable(grid, "OID@", array, "_ID", False)
-        return grid
-    except:
-        line, filename, synerror = trace()
-        raise FunctionError(
-                {
-                "function": "grid_fields",
-                "line": line,
-                "filename": filename,
-                "synerror": synerror,
-                "arc" : str(arcpy.GetMessages(2))
-                }
-                )
-#--------------------------------------------------------------------------
-def validate_workspace(wrksp):
-    """
-    Validates and ensures output workspace exists
-    """
-    try:
-        if wrksp.lower().endswith('.gdb') and \
-           os.path.isdir(wrksp) == False:
-                return arcpy.CreateFileGDB_management(out_folder_path=os.path.dirname(wrksp),
-                                                     out_name=os.path.basename(wrksp))[0]
-        elif wrksp.lower().endswith('.sde') and \
-             os.path.isfile(wrksp) == False:
-            raise ValueError("SDE workspace must exist before using it.")
-        elif os.path.isdir(wrksp) == False:
-            os.makedirs(wrksp)
-            return wrksp
-        else:
-            return wrksp
-    except:
-        line, filename, synerror = trace()
-        raise FunctionError(
-                {
-                "function": "validate_workspace",
-                "line": line,
-                "filename": filename,
-                "synerror": synerror,
-                "arc" : str(arcpy.GetMessages(2))
-                }
-                )
 def diff_date(date):
     """calculates the difference in days from today till the given date"""
     return float((datetime.datetime.now() - date).days)/365.25
@@ -237,59 +147,60 @@ def get_datetime_string(s):
 def main(*argv):
     """ main driver of program """
     try:
-        features = str(argv[0])#.split(';')
-        in_fields = str(argv[1])
-        polygon_grid = argv[2]
-        grid_polygon = argv[3]
-        out_fc_exists = arcpy.Exists(grid_polygon)
-        fc = features
 
-        output_gdb = os.path.dirname(grid_polygon)
-        #  Local Variables
-        #
-        results = []
-        #fcs = []
-        scratchFolder = env.scratchFolder
-        scratchGDB = env.scratchGDB
-        #  Logic
-        #
         master_times = datetime.datetime.now()
 
-        if not out_fc_exists:
+        gis = GIS(config.portal, config.un, config.pw)
 
-            output_gdb = validate_workspace(wrksp=output_gdb)
-            #for fc in features:
-            arcpy.CopyFeatures_management(in_features=polygon_grid,
-                                                     out_feature_class=grid_polygon)
-        #fcs.append(grid_polygon)
-            grid_polygon = grid_fields(grid=grid_polygon)
-            where_clause = None
-            grid_sdf = geomotion.SpatialDataFrame.from_featureclass(grid_polygon)
+        fc = config.features_url
+        polygon_grid = config.grid_url
+        output_features = config.currency_url
 
-        else:
-            arcpy.MakeFeatureLayer_management(grid_polygon, "lyr")
-            arcpy.SelectLayerByLocation_management("lyr", "HAVE_THEIR_CENTER_IN", polygon_grid)
-            oids = [row[0] for row in arcpy.da.SearchCursor("lyr", "OID@")]
-            if len(oids) >1:
-                oids_string = str(tuple(oids))
-            else:
-                oids_string = str('('+ str(oids[0]) + ')')
+        in_fields = 'zi001_sdv'.upper() #str(argv[1]).upper()
 
-            where_clause = 'OBJECTID IN ' + oids_string
-            grid_sdf = geomotion.SpatialDataFrame.from_featureclass(grid_polygon,
-                                        where_clause=where_clause)
+        return_all_records = False
+        look_back_days = config.look_back_days
 
+        dates = csl.get_dates_in_range(look_back_days)
+        where_clause = csl.form_query_string(dates)
 
-        data_sdf = geomotion.SpatialDataFrame.from_featureclass(fc)
-        index = data_sdf.sindex
+        grid_fl = FeatureLayer(url=polygon_grid)
+        grid_sdf = grid_fl.query(return_all_records=False, where=where_clause).df
+
+        geometry = grid_sdf.geometry
+        sr = {'wkid':4326}
+        sp_rel = "esriSpatialRelIntersects"
+
+        results = []
+        counter = 0
         for idx, row in enumerate(grid_sdf.iterrows()):
-
             geom = row[1].SHAPE
-            oid = row[1].OBJECTID
-            ext = [geom.extent.lowerLeft.X, geom.extent.lowerLeft.Y,
-                   geom.extent.upperRight.X, geom.extent.upperRight.Y]
-            row_oids = list(index.intersect(ext))
-            df_current = data_sdf.loc[data_sdf.index.isin(row_oids)]
+            ext = [geom.extent.lowerLeft.X+.1, geom.extent.lowerLeft.Y+.1,
+                   geom.extent.upperRight.X-.1, geom.extent.upperRight.Y-.1]
+
+            new_geom = Geometry({
+                "rings" : [[[geom.extent.upperRight.X-.1, geom.extent.lowerLeft.Y+.1], [geom.extent.lowerLeft.X+.1, geom.extent.lowerLeft.Y+.1], [geom.extent.lowerLeft.X+.1, geom.extent.upperRight.Y-.1], [geom.extent.upperRight.X-.1, geom.extent.upperRight.Y-.1], [geom.extent.upperRight.X-.1, geom.extent.lowerLeft.Y+.1]]],
+                "spatialReference" : {"wkid" : 4326}
+            })
+
+            print(new_geom.extent)
+            grid_filter = filters._filter(new_geom, sr, sp_rel)
+            sp_filter = filters._filter(geom, sr, sp_rel)
+
+            out_fl = FeatureLayer(url=output_features)
+            out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,
+                return_all_records=True).df
+
+            print(out_sdf)
+
+            data_fl = FeatureLayer(url=fc)
+            data_sdf = data_fl.query(out_fields=",".join([in_fields]),
+                geometry_filter=sp_filter,return_geometry=True,
+                return_all_records=return_all_records).df
+
+            print("copying data_sdf to current_df")
+            df_current = data_sdf
+            ##---cut stuff above-----
             sq = df_current['SHAPE'].disjoint(geom) == False
             df_current = df_current[sq].copy()
             if len(df_current) > 0:
@@ -366,68 +277,68 @@ def main(*argv):
                         count_15year_plus = 0
                         score = 6
 
-                r = (oid,
-                        dom_date,
-                        dom_date_count,
-                        round(dom_date_count * 100.0 / count,1),
-                        dom_year,
-                        dom_year_count,
-                        round(dom_year_count * 100.0 / count,1),
-                        oldest,
-                        newest,
-                        count_non_std_dates,
-                        round(float(count_non_std_dates) * 100.0 / count,1),
-                        round(float(count_2year) * 100.0 / count,1),
-                        round(float(count_5year) * 100.0 / count,1),
-                        round(float(count_10year) * 100.0 / count,1),
-                        round(float(count_15year) * 100.0 / count,1),
-                        round(float(count_15year_plus) * 100.0 / count,1),
-                        int(count),
-                        int(score))
-                results.append(r)
+                out_sdf[FIELDS[0]][0]=dom_date
+                out_sdf[FIELDS[1]][0]=dom_date_count
+                out_sdf[FIELDS[2]][0]=round(dom_date_count * 100.0 / count,1)
+                out_sdf[FIELDS[3]][0]=dom_year
+                out_sdf[FIELDS[4]][0]=dom_year_count
+                out_sdf[FIELDS[5]][0]=round(dom_year_count * 100.0 / count,1)
+                out_sdf[FIELDS[6]][0]=oldest
+                out_sdf[FIELDS[7]][0]=newest
+                out_sdf[FIELDS[8]][0]=count_non_std_dates
+                out_sdf[FIELDS[9]][0]=round(float(count_non_std_dates) * 100.0 / count,1)
+                out_sdf[FIELDS[10]][0]=round(float(count_2year) * 100.0 / count,1)
+                out_sdf[FIELDS[11]][0]=round(float(count_5year) * 100.0 / count,1)
+                out_sdf[FIELDS[12]][0]=round(float(count_10year) * 100.0 / count,1)
+                out_sdf[FIELDS[13]][0]=round(float(count_15year) * 100.0 / count,1)
+                out_sdf[FIELDS[14]][0]=round(float(count_15year_plus) * 100.0 / count,1)
+                out_sdf[FIELDS[15]][0]=int(count)
+                out_sdf[FIELDS[16]][0]=int(score)
+
             else:
-                results.append(
-                    (oid, "None", 0,0,
-                     0,0,0, "None",
-                     "None",0,0,
-                     0,0,0,
-                     0,0,0,0))
-            if len(results) > 1000:
-                extend_table(rows=results, table=grid_polygon)
-                results = []
+                out_sdf[FIELDS[0]][0]="None"
+                out_sdf[FIELDS[1]][0]=0
+                out_sdf[FIELDS[2]][0]=0
+                out_sdf[FIELDS[3]][0]=0
+                out_sdf[FIELDS[4]][0]=0
+                out_sdf[FIELDS[5]][0]=0
+                out_sdf[FIELDS[6]][0]="None"
+                out_sdf[FIELDS[7]][0]="None"
+                out_sdf[FIELDS[8]][0]=0
+                out_sdf[FIELDS[9]][0]=0
+                out_sdf[FIELDS[10]][0]=0
+                out_sdf[FIELDS[11]][0]=0
+                out_sdf[FIELDS[12]][0]=0
+                out_sdf[FIELDS[13]][0]=0
+                out_sdf[FIELDS[14]][0]=0
+                out_sdf[FIELDS[15]][0]=0
+                out_sdf[FIELDS[16]][0]=0
+
+            out_sdf_as_featureset = out_sdf.to_featureset()
+            print(out_sdf_as_featureset)
+            out_fl.edit_features(updates=out_sdf_as_featureset)
+
             del df_current
             del ext
             del geom
-            del oid
-        if len(results) > 0:
-            extend_table(rows=results, table=grid_polygon)
-            results = []
+
         del fc
         del data_sdf
-        del index
-        #arcpy.SetParameter(4, fcs)
-        arcpy.AddMessage("Total Time %s" % (datetime.datetime.now() - master_times))
-    except arcpy.ExecuteError:
-        line, filename, synerror = trace()
-        arcpy.AddError("error on line: %s" % line)
-        arcpy.AddError("error in file name: %s" % filename)
-        arcpy.AddError("with error message: %s" % synerror)
-        arcpy.AddError("ArcPy Error Message: %s" % arcpy.GetMessages(2))
+
+        print("Total Time %s" % (datetime.datetime.now() - master_times))
     except FunctionError as f_e:
         messages = f_e.args[0]
-        arcpy.AddError("error in function: %s" % messages["function"])
-        arcpy.AddError("error on line: %s" % messages["line"])
-        arcpy.AddError("error in file name: %s" % messages["filename"])
-        arcpy.AddError("with error message: %s" % messages["synerror"])
-        arcpy.AddError("ArcPy Error Message: %s" % messages["arc"])
+##        arcpy.AddError("error in function: %s" % messages["function"])
+##        arcpy.AddError("error on line: %s" % messages["line"])
+##        arcpy.AddError("error in file name: %s" % messages["filename"])
+##        arcpy.AddError("with error message: %s" % messages["synerror"])
+##        arcpy.AddError("ArcPy Error Message: %s" % messages["arc"])
     except:
         line, filename, synerror = trace()
-        arcpy.AddError("error on line: %s" % line)
-        arcpy.AddError("error in file name: %s" % filename)
-        arcpy.AddError("with error message: %s" % synerror)
+##        arcpy.AddError("error on line: %s" % line)
+##        arcpy.AddError("error in file name: %s" % filename)
+##        arcpy.AddError("with error message: %s" % synerror)
 #--------------------------------------------------------------------------
 if __name__ == "__main__":
     #env.overwriteOutput = True
-    argv = tuple(arcpy.GetParameterAsText(i)
-    for i in range(arcpy.GetArgumentCount()))
-    main(*argv)
+    main()

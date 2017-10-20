@@ -13,8 +13,6 @@ License: TBD
 -----------------------------------------------------------------------------"""
 
 import os
-import arcpy
-from geodataset import SpatialDataFrame
 import datetime
 
 def get_datetime_string(s):
@@ -26,8 +24,6 @@ def get_dates_in_range(look_back_days):
     today = datetime.datetime.today()
     date_list = [today - datetime.timedelta(days=x) for x in range(0, num_days)]
     dates = [d for d in get_datetime_string(date_list)]
-    arcpy.AddMessage(date_list)
-    arcpy.AddMessage(dates)
     return dates
 
 def form_query_string(date_list):
@@ -37,42 +33,4 @@ def form_query_string(date_list):
     else:
         dates_to_query = str('('+ str(date_list[0]) + ')')
     query = date_select_field + ' IN ' + dates_to_query
-    print(query)
     return query
-
-
-master_times = datetime.datetime.now()
-
-input_features = arcpy.GetParameterAsText(0)
-grid_features = arcpy.GetParameterAsText(1)
-output_feature_lyr =  arcpy.GetParameterAsText(3)#"feature_lyr"
-output_selected_grid = arcpy.GetParameterAsText(4)#"grid_lyr"
-look_back_days = int(arcpy.GetParameterAsText(2))
-#last_processed_crvs = arcpy.GetParameterAsText(4)
-#last_processed_grids = arcpy.GetParameterAsText(5)
-
-dates = get_dates_in_range(look_back_days)
-where_clause = form_query_string(dates)
-arcpy.MakeFeatureLayer_management(grid_features,
-                                    output_selected_grid)
-
-arcpy.SelectLayerByAttribute_management(output_selected_grid,
-                                        "NEW_SELECTION",
-                                        where_clause)
-
-arcpy.MakeFeatureLayer_management(input_features, output_feature_lyr)
-print(arcpy.GetCount_management(output_selected_grid)[0])
-arcpy.SelectLayerByLocation_management(in_layer=output_feature_lyr,
-                                        overlap_type="INTERSECT",
-                                        select_features=output_selected_grid)
-
-#lines_sdf = SpatialDataFrame.from_featureclass(filename=output_feature_lyr)
-#lines_sdf.to_featureclass(os.path.dirname(last_processed_crvs),
-#                    os.path.basename(last_processed_crvs))
-
-#grid_sdf = SpatialDataFrame.from_featureclass(filename=output_selected_grid)
-#grid_sdf.to_featureclass(os.path.dirname(last_processed_grids),
-#                    os.path.basename(last_processed_grids))
-
-print("Total Time %s" % (datetime.datetime.now() - master_times))
-print('Done.')

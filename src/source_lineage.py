@@ -20,25 +20,26 @@ from __future__ import print_function
 import os
 import sys
 import numpy as np
-import logging
+#import logging
 import datetime
 
-import geodataset as geomotion
-import arcpy
-from arcpy import env
-from arcpy import da
+#Using the ArcGIS API for Python
+import arcgis
+from arcgis.gis import GIS
+from arcgis.features import FeatureLayer
+from arcgis.geometry import filters
+from arcgis.geometry import Geometry
 
-if sys.version_info.major == 3:
-    from arcpy import mp as mapping
-else:
-    from arcpy import mapping
-    reload(sys)
-    sys.setdefaultencoding('utf8')
+#Import logic to create layer selection
+import create_selection_layers as csl
+import sotd_config as config
+
 ###########################################################################
 module = __file__
-logging.basicConfig(stream=sys.stderr, level=logging.DEBUG,
-                    format='%(name)s (%(levelname)s): %(message)s')
-log = logging.getLogger(module)
+#logging.basicConfig(stream=sys.stderr, level=logging.DEBUG,
+#                    format='%(name)s (%(levelname)s): %(message)s')
+#log = logging.getLogger(module)
+#log.diabled = True
 ###########################################################################
 
 FIELDS = ('SOURCE_LIST',
@@ -48,6 +49,19 @@ FIELDS = ('SOURCE_LIST',
           'SEC_SOURCE',
           'SEC_SOURCE_CNT',
           'SEC_SOURCE_PER')
+
+##        dtypes = np.dtype(
+##            [
+##                ('_ID', np.int),
+##                ('SOURCE_LIST', '|S1024'),
+##                ('PRI_SOURCE', '|S256'),
+##                ('PRI_SOURCE_CNT', np.int32),
+##                ('PRI_SOURCE_PER', np.float64),
+##                ('SEC_SOURCE', '|S256'),
+##                ('SEC_SOURCE_CNT', np.int32),
+##                ('SEC_SOURCE_PER', np.float64)
+##            ]
+
 #--------------------------------------------------------------------------
 class FunctionError(Exception):
     """ raised when a function fails to run """
@@ -68,79 +82,65 @@ def trace():
     #
     synerror = traceback.format_exc().splitlines()[-1]
     return line, __file__, synerror
-#--------------------------------------------------------------------------
-def validate_workspace(wrksp):
-    """
-    Validates and ensures output workspace exists
-    """
-    try:
-        if wrksp.lower().endswith('.gdb') and \
-           os.path.isdir(wrksp) == False:
-                return arcpy.CreateFileGDB_management(out_folder_path=os.path.dirname(wrksp),
-                                                     out_name=os.path.basename(wrksp))[0]
-        elif wrksp.lower().endswith('.sde') and \
-             os.path.isfile(wrksp) == False:
-            raise ValueError("SDE workspace must exist before using it.")
-        elif os.path.isdir(wrksp) == False:
-            os.makedirs(wrksp)
-            return wrksp
-        else:
-            return wrksp
-    except:
-        line, filename, synerror = trace()
-        raise FunctionError(
-                {
-                "function": "validate_workspace",
-                "line": line,
-                "filename": filename,
-                "synerror": synerror,
-                "arc" : str(arcpy.GetMessages(2))
-                }
-                )
 
+def main():
+    """ main driver of program """
+    try:
+        master_times = datetime.datetime.now()
 
-#--------------------------------------------------------------------------
-def extend_table(fc, array):
-    """
-    extends to append field and data to an existing table
-    """
-    try:
-        da.ExtendTable(fc, "OID@", array, "_ID", False)
-        return fc
-    except:
-        line, filename, synerror = trace()
-        raise FunctionError(
-                {
-                    "function": "extend_table",
-                    "line": line,
-                    "filename": filename,
-                    "synerror": synerror,
-                    "arc" : str(arcpy.GetMessages(2))
-                    }
-            )
-#--------------------------------------------------------------------------
-def process_source_lineage(grid_sdf, data_sdf, search_field=None, value_field=None, where_clause=None):
-    """
-    performs the operation to generate the
-    """
-    try:
-        grid_sdf = geomotion.SpatialDataFrame.from_featureclass(grid_sdf,
-                    where_clause=where_clause)
-        data_sdf = geomotion.SpatialDataFrame.from_featureclass(data_sdf,
-                    fields=[search_field, value_field],
-                    encoding='utf-8')
-        index = data_sdf.sindex
+        gis = GIS(config.portal, config.un, config.pw)
+
+        fc = config.features_url
+        polygon_grid = config.grid_url
+        output_features = config.source_lineage_url
+
+        search_field = 'zi001_sdp'.upper() #str(argv[1]).upper()
+        value_field  = 'zi001_sps'.upper() #str(argv[2]).upper()
+
+        return_all_records = False
+        look_back_days = config.look_back_days
+
+        dates = csl.get_dates_in_range(look_back_days)
+        where_clause = csl.form_query_string(dates)
+
+        grid_fl = FeatureLayer(url=polygon_grid)
+        grid_sdf = grid_fl.query(return_all_records=False, where=where_clause).df
+
+        geometry = grid_sdf.geometry
+        sr = {'wkid':4326}
+        sp_rel = "esriSpatialRelIntersects"
+
         results = []
         for idx, row in enumerate(grid_sdf.iterrows()):
             geom = row[1].SHAPE
-            ext = [geom.extent.lowerLeft.X, geom.extent.lowerLeft.Y,
-                   geom.extent.upperRight.X, geom.extent.upperRight.Y]
-            row_oids = list(index.intersect(ext))
-            df_current = data_sdf.loc[data_sdf.index.isin(row_oids)]
-            # disjoint == False means intersection with Grid polygon
-            # query out the data we need. in this case zi001_sps == 1001
+            ext = [geom.extent.lowerLeft.X+.1, geom.extent.lowerLeft.Y+.1,
+                   geom.extent.upperRight.X-.1, geom.extent.upperRight.Y-.1]
+
+            new_geom = Geometry({
+                "rings" : [[[geom.extent.upperRight.X-.1, geom.extent.lowerLeft.Y+.1], [geom.extent.lowerLeft.X+.1, geom.extent.lowerLeft.Y+.1], [geom.extent.lowerLeft.X+.1, geom.extent.upperRight.Y-.1], [geom.extent.upperRight.X-.1, geom.extent.upperRight.Y-.1], [geom.extent.upperRight.X-.1, geom.extent.lowerLeft.Y+.1]]],
+                "spatialReference" : {"wkid" : 4326}
+            })
+
+            print(new_geom.extent)
+            grid_filter = filters._filter(new_geom, sr, sp_rel)
+            sp_filter = filters._filter(geom, sr, sp_rel)
+
+            out_fl = FeatureLayer(url=output_features)
+            out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,
+                return_all_records=True).df
+
+            print(out_sdf)
+
+            data_fl = FeatureLayer(url=fc)
+            data_sdf = data_fl.query(out_fields=",".join([search_field, value_field]),
+                geometry_filter=sp_filter,return_geometry=True,
+                return_all_records=return_all_records).df
+
+            print("copying data_sdf to current_df")
+            df_current = data_sdf
+
             df_sub = df_current.loc[df_current.disjoint(geom) == False].copy()
-            df_sub = df = df_sub.loc[df_sub[search_field] == 1001].copy()
+            df_sub = df_sub.loc[df_sub[search_field] == 1001].copy()
 
             df_sub = df_sub.replace({np.nan: "NULL"})
 
@@ -158,174 +158,55 @@ def process_source_lineage(grid_sdf, data_sdf, search_field=None, value_field=No
                             na_position='last')
             if len(grp) > 1:
                 grp = grp.head(2)
-                results.append(
-                    (
-                        int(row[1].OBJECTID),
-                        ",".join(df_sub[value_field].unique().tolist()),
-                        grp.index[0],
-                        int(grp[0]),
-                        round(float(grp[0]) * 100.0 / float(len(df_sub)),1),
-                        grp.index[1],
-                        int(grp[1]),
-                        round(float(grp[1]) * 100.0 / float(len(df_sub)),1),
-                    )
-                )
+                out_sdf[FIELDS[0]][0]=",".join(df_sub[value_field].unique().tolist())
+                out_sdf[FIELDS[1]][0]=grp.index[0]
+                out_sdf[FIELDS[2]][0]=int(grp[0])
+                out_sdf[FIELDS[3]][0]=float(grp[0]) * 100.0 / float(len(df_sub))
+                out_sdf[FIELDS[4]][0]=grp.index[1]
+                out_sdf[FIELDS[5]][0]=int(grp[1])
+                out_sdf[FIELDS[6]][0]=float(grp[1]) * 100.0 / float(len(df_sub))
+
             elif len(grp) == 0:
-                results.append(
-                    (int(row[1].OBJECTID),
-                     'None',
-                     'None',
-                     0,
-                     float(0),
-                     'None',
-                     0,
-                     float(0))
-                )
+                out_sdf[FIELDS[0]][0]='None'
+                out_sdf[FIELDS[1]][0]='None'
+                out_sdf[FIELDS[2]][0]=0
+                out_sdf[FIELDS[3]][0]=float(0)
+                out_sdf[FIELDS[4]][0]='None'
+                out_sdf[FIELDS[5]][0]=0
+                out_sdf[FIELDS[6]][0]=float(0)
+
             elif len(grp) == 1:
-                results.append(
-                    (
-                        int(row[1].OBJECTID),
-                        ",".join(df_sub[value_field].unique().tolist()),
-                        grp.index[0],
-                        int(grp[0]),
-                        round(float(grp[0]) * 100.0 / float(len(df_sub)),1),
-                        'None',
-                        0,
-                        float(0)
-                    )
-                )
+                out_sdf[FIELDS[0]][0]=",".join(df_sub[value_field].unique().tolist())
+                out_sdf[FIELDS[1]][0]=grp.index[0]
+                out_sdf[FIELDS[2]][0]=int(grp[0])
+                out_sdf[FIELDS[3]][0]=float(grp[0]) * 100.0 / float(len(df_sub))
+                out_sdf[FIELDS[4]][0]='None'
+                out_sdf[FIELDS[5]][0]=0
+                out_sdf[FIELDS[6]][0]=float(0)
+
+            out_sdf_as_featureset = out_sdf.to_featureset()
+            print(out_sdf_as_featureset)
+            out_fl.edit_features(updates=out_sdf_as_featureset)
+
             del grp
             del df_sub
-            del row_oids
             del df_current
-        del grid_sdf
-        del data_sdf
-        dtypes = np.dtype(
-            [
-                ('_ID', np.int),
-                ('SOURCE_LIST', '|S1024'),
-                ('PRI_SOURCE', '|S256'),
-                ('PRI_SOURCE_CNT', np.int32),
-                ('PRI_SOURCE_PER', np.float64),
-                ('SEC_SOURCE', '|S256'),
-                ('SEC_SOURCE_CNT', np.int32),
-                ('SEC_SOURCE_PER', np.float64)
-            ]
-        )
-        array = np.array(results, dtypes)
-        del results
-        return array
-    except:
-        line, filename, synerror = trace()
-        raise FunctionError(
-                {
-                        "function": "process_source_lineage",
-                        "line": line,
-                        "filename": filename,
-                        "synerror": synerror,
-                        "arc" : str(arcpy.GetMessages(2))
-                    }
-            )
-#--------------------------------------------------------------------------
-def main(*argv):
-    """ main driver of program """
-    try:
-        fcs = argv[0]
-        source_field = str(argv[1]).upper()
-        value_field = str(argv[2]).upper()
-        polygon_grid = argv[3]
-        output_fc = argv[4]
-        out_fc_exists = arcpy.Exists(output_fc)
 
-        output_gdb, out_name = os.path.split(output_fc)
-        #   Local Variables
-        #
-        scratchGDB = env.scratchGDB
-        scratchFolder = env.scratchFolder
-        results = []
-        source_fields = ['zi001_sdp'.upper(),
-                         'zi001_sps'.upper()]
-        #  Logic
-        #
-        if not source_field:
-            source_field = source_fields[1]
-        if not value_field:
-            value_field = source_fields[0]
-        #if not output_gdb:
-        #    output_gdb = env.scratchGDB
-        master_times = datetime.datetime.now()
-        fc = fcs
-        if not out_fc_exists:
-            output_gdb = validate_workspace(wrksp=output_gdb)
-
-            #out_name = "srcLin_%s_%s" % (os.path.basename(fc[:-3]), fc[-3:])
-            out_grid = os.path.join(output_gdb, out_name)
-            out_grid = arcpy.CopyFeatures_management(polygon_grid, out_grid)[0]
-
-            arcpy.AddMessage("Working on feature class: %s" % os.path.basename(fc))
-            array = process_source_lineage(grid_sdf=out_grid,
-                                           data_sdf=fc,
-                                           search_field=source_field,
-                                           value_field=value_field)
-            extend_table(out_grid, array)
-            results.append(out_grid)
-        else:
-            arcpy.MakeFeatureLayer_management(output_fc, "lyr")
-            arcpy.SelectLayerByLocation_management("lyr", "HAVE_THEIR_CENTER_IN", polygon_grid)
-            oids = [row[0] for row in arcpy.da.SearchCursor("lyr", "OID@")]
-            if len(oids) >1:
-                oids_string = str(tuple(oids))
-            else:
-                oids_string = str('('+ str(oids[0]) + ')')
-
-            arcpy.AddMessage("Analyzing " + oids_string)
-            arcpy.AddMessage("Working on feature class: %s" % os.path.basename(fc))
-            array = process_source_lineage(grid_sdf=output_fc,
-                                           data_sdf=fc,
-                                           search_field=source_field,
-                                           value_field=value_field,
-                                           where_clause='OBJECTID IN ' + oids_string)
-            extend_table(output_fc, array)
-            results.append(output_fc)
-
-        arcpy.AddMessage("Analysis on feature class: %s finished." % os.path.basename(fc))
-        arcpy.AddMessage("Total Time %s" % (datetime.datetime.now() - master_times))
-        #arcpy.SetParameterAsText(5, results)
-    except arcpy.ExecuteError:
-        line, filename, synerror = trace()
-        arcpy.AddError("error on line: %s" % line)
-        arcpy.AddError("error in file name: %s" % filename)
-        arcpy.AddError("with error message: %s" % synerror)
-        arcpy.AddError("ArcPy Error Message: %s" % arcpy.GetMessages(2))
-        log.error("error on line: %s" % line)
-        log.error("error in file name: %s" % filename)
-        log.error("with error message: %s" % synerror)
-        log.error("ArcPy Error Message: %s" % arcpy.GetMessages(2))
+        print("Total Time %s" % (datetime.datetime.now() - master_times))
     except FunctionError as f_e:
         messages = f_e.args[0]
-        arcpy.AddError("error in function: %s" % messages["function"])
-        arcpy.AddError("error on line: %s" % messages["line"])
-        arcpy.AddError("error in file name: %s" % messages["filename"])
-        arcpy.AddError("with error message: %s" % messages["synerror"])
-        arcpy.AddError("ArcPy Error Message: %s" % messages["arc"])
-        log.error("error in function: %s" % messages["function"])
-        log.error("error on line: %s" % messages["line"])
-        log.error("error in file name: %s" % messages["filename"])
-        log.error("with error message: %s" % messages["synerror"])
-        log.error("ArcPy Error Message: %s" % messages["arc"])
+        #log.error("error in function: %s" % messages["function"])
+        #log.error("error on line: %s" % messages["line"])
+        #log.error("error in file name: %s" % messages["filename"])
+        #log.error("with error message: %s" % messages["synerror"])
+        #log.error("ArcPy Error Message: %s" % messages["arc"])
     except:
         line, filename, synerror = trace()
-        arcpy.AddError("error on line: %s" % line)
-        arcpy.AddError("error in file name: %s" % filename)
-        arcpy.AddError("with error message: %s" % synerror)
-        log.error("error on line: %s" % line)
-        log.error("error in file name: %s" % filename)
-        log.error("with error message: %s" % synerror)
-    finally:
-        logging.shutdown()
+        #log.error("error on line: %s" % line)
+        #log.error("error in file name: %s" % filename)
+        #log.error("with error message: %s" % synerror)
+    ##finally:
+        ##logging.shutdown()
 #--------------------------------------------------------------------------
 if __name__ == "__main__":
-    #env.overwriteOutput = True
-    argv = tuple(arcpy.GetParameterAsText(i)
-    for i in range(arcpy.GetArgumentCount()))
-    main(*argv)
+    main()
