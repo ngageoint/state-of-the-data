@@ -14,22 +14,27 @@ Modified: August 24, 2016 | April, 2017
 Copyright: Esri
 License: TBD
 -----------------------------------------------------------------------------"""
-
+from __future__ import division
+from __future__ import print_function
 import os
 import sys
 import numpy as np
 import pandas as pd
 from collections import Counter
-import geodataset as geomotion
-import arcpy
-from arcpy import env
-from arcpy import da
 
+#Using the ArcGIS API for Python
+import arcgis
+from arcgis.gis import GIS
+from arcgis.features import FeatureLayer
+from arcgis.geometry import filters
+from arcgis.geometry import Geometry
 
+#Import logic to create layer selection
+import sotd_config as config
 
-out_fields = ('MEAN', 'MEDIAN',
-              'MODE', 'MIN',
-              'MAX', 'NO_DATE_CNT',
+FIELDS = ('MEAN', 'MEDIAN',
+              'MODE', 'MIN_',
+              'MAX_', 'NO_DATE_CNT',
               'NO_DATE_PCT', 'FEATURE_CNT',
               'PA_SCORE', "TIER")
 
@@ -54,35 +59,6 @@ def trace():
     #
     synerror = traceback.format_exc().splitlines()[-1]
     return line, __file__, synerror
-#--------------------------------------------------------------------------
-def validate_workspace(wrksp):
-    """
-    Validates and ensures output workspace exists
-    """
-    try:
-        if wrksp.lower().endswith('.gdb') and \
-           os.path.isdir(wrksp) == False:
-                return arcpy.CreateFileGDB_management(out_folder_path=os.path.dirname(wrksp),
-                                                     out_name=os.path.basename(wrksp))[0]
-        elif wrksp.lower().endswith('.sde') and \
-             os.path.isfile(wrksp) == False:
-            raise ValueError("SDE workspace must exist before using it.")
-        elif os.path.isdir(wrksp) == False:
-            os.makedirs(wrksp)
-            return wrksp
-        else:
-            return wrksp
-    except:
-        line, filename, synerror = trace()
-        raise FunctionError(
-                {
-                "function": "validate_workspace",
-                "line": line,
-                "filename": filename,
-                "synerror": synerror,
-                "arc" : str(arcpy.GetMessages(2))
-                }
-                )
 #--------------------------------------------------------------------------
 def get_score(mean):
     value = 0
@@ -121,199 +97,121 @@ def get_tier(score):
         cat = "No Ranking"
     return cat
 #--------------------------------------------------------------------------
-def extend_table(table, rows=None):
-    """
-    Adds the required columns to the table and appends new records if
-    given.
-    """
-    try:
-        if rows is None:
-            rows = []
-        dtypes = np.dtype(
-            [
-                ('_ID', np.int),
-                ('MEAN', np.float64),
-                ('MEDIAN', np.float64),
-                ('MODE', np.float64),
-                ('MIN', np.float64),
-                ('MAX', np.float64),
-                ('NO_DATE_CNT', np.int32),
-                ('NO_DATE_PCT', np.float64),
-                ('FEATURE_CNT', np.int32),
-                ('PA_SCORE', np.int32),
-                ("TIER", '|S1024')
-            ]
-        )
-        array = np.array(rows, dtypes)
-        da.ExtendTable(table, "OID@", array, "_ID", False)
-    except:
-        line, filename, synerror = trace()
-        raise FunctionError(
-                {
-                "function": "",
-                "line": line,
-                "filename": filename,
-                "synerror": synerror,
-                "arc" : str(arcpy.GetMessages(2))
-                }
-                )
+##                ('_ID', np.int),
+##                ('MEAN', np.float64),
+##                ('MEDIAN', np.float64),
+##                ('MODE', np.float64),
+##                ('MIN', np.float64),
+##                ('MAX', np.float64),
+##                ('NO_DATE_CNT', np.int32),
+##                ('NO_DATE_PCT', np.float64),
+##                ('FEATURE_CNT', np.int32),
+##                ('PA_SCORE', np.int32),
+##                ("TIER", '|S1024')
 #--------------------------------------------------------------------------
-def main(*argv):
+def positional_accuracy(gis, df_current, output_features, grid_filter, geom, value_field):
     """ main driver of program """
     try:
-        features =  str(argv[0])#.split(';')
-        value_field = str(argv[1])
-        polygon_grid = argv[2]
-        output_fc = argv[3]
-        out_fc_exists = arcpy.Exists(output_fc)
-        fc = features
-
-        output_gdb, out_name = os.path.split(output_fc)
-
-        #  Local Variables
-        #
-        scratchFolder = env.scratchFolder
-        scratchGDB = env.scratchGDB
-        grid_polygon = None
-        results = []
-        fcs = []
         PDVERSION = [int(v) for v in pd.__version__.split('.')]
-        #  Logic
-        #
 
-        #for fc in features:
-        field_lookup = {field.name: field.name for field in arcpy.ListFields(fc)}
-        if value_field in field_lookup:
-            value_field = field_lookup[value_field]
-        else:
-            raise ValueError("Invalid field name: %s. Field not found." % value_field)
-        f_name = os.path.basename(fc)
-        g_name = out_name
+        out_fl = FeatureLayer(gis=gis, url=output_features)
+        out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,
+            return_all_records=True).df
 
-        if not out_fc_exists:
-            output_gdb = validate_workspace(output_gdb)
-            grid_polygon = arcpy.CopyFeatures_management(in_features=polygon_grid,
-                                                     out_feature_class=os.path.join(output_gdb, g_name))[0]
-            extend_table(grid_polygon)
-            grid_sdf = geomotion.SpatialDataFrame.from_featureclass(grid_polygon)
-            table = grid_polygon
-        else:
-            arcpy.MakeFeatureLayer_management(output_fc, "lyr")
-            arcpy.SelectLayerByLocation_management("lyr", "HAVE_THEIR_CENTER_IN", polygon_grid)
-            oids = [row[0] for row in arcpy.da.SearchCursor("lyr", "OID@")]
-            if len(oids) >1:
-                oids_string = str(tuple(oids))
+        sq = df_current['SHAPE'].disjoint(geom) == False
+        df_current = df_current[sq].copy()
+        if len(df_current) > 0:
+            df_notnull = df_current.loc[df_current[value_field].notnull() == True]
+            if PDVERSION[1] <= 16:
+                df_notnull = df_notnull.drop(value_field, axis=1).join(df_notnull[value_field].astype(float,raise_on_error=False)).copy()
+            elif PDVERSION[1] > 16:
+                df_notnull = df_notnull.drop(value_field, axis=1).join(df_notnull[value_field].apply(pd.to_numeric, errors='coerce')).copy()  # CHANGES NON NUMERIC ROWS to NaN
+            df_notnull = df_notnull.loc[df_notnull[value_field].notnull() == True].copy() # Drops NaN values
+            not_null_count = len(df_notnull)
+            null_count = len(df_current) - not_null_count
+            if PDVERSION[1] == 16:
+                try:
+                    s = df_notnull.loc[df_notnull[value_field] != 'No Information', value_field].copy().astype(np.float64)
+                except:
+                    s = df_notnull.loc[df_notnull[value_field].astype(str) != 'No Information', value_field].copy().astype(np.float64)
+            elif PDVERSION[1] > 16:
+                s = df_notnull.drop(value_field, axis=1).join(df_notnull[value_field].apply(pd.to_numeric, errors='coerce'))[value_field].copy() # Drops Text Fields
+            s = s[s.notnull() == True].copy() # Drops NaN values
+            mean = s.mean()
+            median = s.median()
+            mode = s.mode()
+            if len(mode) > 0:
+                mode = mode[0]
             else:
-                oids_string = str('('+ str(oids[0]) + ')')
+                mode = 0
+            mmax = s.max()
+            mmin = s.min()
+            score = get_score(mean)
+            null_percent = float(null_count) * 100.0 / float(len(df_current))
 
-            where_clause = 'OBJECTID IN ' + oids_string
-            grid_sdf = geomotion.SpatialDataFrame.from_featureclass(output_fc,
-                                        where_clause=where_clause)
-            table = output_fc
-            #extend_table(output_fc)
-            #results.append(output_fc)
-
-        data_sdf = geomotion.SpatialDataFrame.from_featureclass(fc, fields=[value_field])
-        index = data_sdf.sindex
-        for idx, row in enumerate(grid_sdf.iterrows()):
-            geom = row[1].SHAPE
-            oid = row[1].OBJECTID
-            ext = [geom.extent.lowerLeft.X, geom.extent.lowerLeft.Y,
-                   geom.extent.upperRight.X, geom.extent.upperRight.Y]
-            row_oids = list(index.intersect(ext))
-            df_current = data_sdf.loc[data_sdf.index.isin(row_oids)]#.copy()
-            sq = df_current['SHAPE'].disjoint(geom) == False
-            df_current = df_current[sq].copy()
-            #  Perform positional accuracy analysis
-            #
-            if len(df_current) > 0:
-                df_notnull = df_current.loc[df_current[value_field].notnull() == True]
-                if PDVERSION[1] <= 16:
-                    df_notnull = df_notnull.drop(value_field, axis=1).join(df_notnull[value_field].astype(float,raise_on_error=False)).copy()
-                elif PDVERSION[1] > 16:
-                    df_notnull = df_notnull.drop(value_field, axis=1).join(df_notnull[value_field].apply(pd.to_numeric, errors='coerce')).copy()  # CHANGES NON NUMERIC ROWS to NaN
-                df_notnull = df_notnull.loc[df_notnull[value_field].notnull() == True].copy() # Drops NaN values
-                not_null_count = len(df_notnull)
-                null_count = len(df_current) - not_null_count
-                if PDVERSION[1] == 16:
-                    try:
-                        s = df_notnull.loc[df_notnull[value_field] != 'No Information', value_field].copy().astype(np.float64)
-                    except:
-                        s = df_notnull.loc[df_notnull[value_field].astype(str) != 'No Information', value_field].copy().astype(np.float64)
-                elif PDVERSION[1] > 16:
-                    s = df_notnull.drop(value_field, axis=1).join(df_notnull[value_field].apply(pd.to_numeric, errors='coerce'))[value_field].copy() # Drops Text Fields
-                s = s[s.notnull() == True].copy() # Drops NaN values
-                mean = s.mean()
-                median = s.median()
-                mode = s.mode()
-                if len(mode) > 0:
-                    mode = mode[0]
-                else:
-                    mode = 0
-                mmax = s.max()
-                mmin = s.min()
-                score = get_score(mean)
-                null_percent = float(null_count) * 100.0 / float(len(df_current))
-
-                results.append((oid, round(mean,1), median,
-                                mode, mmin, mmax,
-                                null_count, round(null_percent,1),
-                                not_null_count,
-                                score, get_tier(score)))
-                del df_notnull
-                del mean
-                del median
-                del mode
-                del mmax
-                del mmin
-                del score
-                del null_percent
+            if not pd.isnull(mean):
+                out_sdf[FIELDS[0]][0]=round(mean,1)
             else:
-                r = tuple([oid] + [-1]*5 + [0] * 4 + ["No Ranking"])
-                results.append(r)
-            if len(results) > 1000:
-                print(table)
-                extend_table(table=table,
-                             rows=results)
-                results = []
-            del row_oids
-            del ext
-            del geom
-            del oid
-            del df_current
-        if len(results) > 0:
-            print(table)
-            extend_table(table=table,
-                             rows=results)
-            results = []
-        del index
-        del grid_polygon
-        del grid_sdf
-        del data_sdf
-        fcs.append(fc)
-        del fc
-        #arcpy.SetParameter(4, fcs)
-    except arcpy.ExecuteError:
-        line, filename, synerror = trace()
-        arcpy.AddError("error on line: %s" % line)
-        arcpy.AddError("error in file name: %s" % filename)
-        arcpy.AddError("with error message: %s" % synerror)
-        arcpy.AddError("ArcPy Error Message: %s" % arcpy.GetMessages(2))
+                out_sdf[FIELDS[0]][0]=-1
+            if not pd.isnull(median):
+                out_sdf[FIELDS[1]][0]=median
+            else:
+                out_sdf[FIELDS[1]][0]=-1
+
+            if not pd.isnull(mode):
+                out_sdf[FIELDS[2]][0]=mode
+            else:
+                out_sdf[FIELDS[2]][0]=-1
+
+            if not pd.isnull(mmin):
+                out_sdf[FIELDS[3]][0]=mmin
+            else:
+                out_sdf[FIELDS[3]][0]=-1
+
+            if not pd.isnull(mmax):
+                out_sdf[FIELDS[4]][0]=mmax
+            else:
+                out_sdf[FIELDS[4]][0]=-1
+
+            out_sdf[FIELDS[5]][0]=null_count
+            out_sdf[FIELDS[6]][0]=round(null_percent,1)
+            out_sdf[FIELDS[7]][0]=len(df_current)#not_null_count
+            out_sdf[FIELDS[8]][0]=score
+            out_sdf[FIELDS[9]][0]=get_tier(score)
+
+            del df_notnull
+            del mean
+            del median
+            del mode
+            del mmax
+            del mmin
+            del score
+            del null_percent
+        else:
+            out_sdf[FIELDS[0]][0]=-1
+            out_sdf[FIELDS[1]][0]=-1
+            out_sdf[FIELDS[2]][0]=-1
+            out_sdf[FIELDS[3]][0]=-1
+            out_sdf[FIELDS[4]][0]=-1
+            out_sdf[FIELDS[5]][0]=0
+            out_sdf[FIELDS[6]][0]=0
+            out_sdf[FIELDS[7]][0]=0
+            out_sdf[FIELDS[8]][0]=0
+            out_sdf[FIELDS[9]][0]="No Ranking"
+            #r = tuple([oid] + [-1]*5 + [0] * 4 + ["No Ranking"])
+
+        return out_sdf, out_fl
+
+
     except FunctionError as f_e:
         messages = f_e.args[0]
-        arcpy.AddError("error in function: %s" % messages["function"])
-        arcpy.AddError("error on line: %s" % messages["line"])
-        arcpy.AddError("error in file name: %s" % messages["filename"])
-        arcpy.AddError("with error message: %s" % messages["synerror"])
-        arcpy.AddError("ArcPy Error Message: %s" % messages["arc"])
+        #arcpy.AddError("error in function: %s" % messages["function"])
+        #arcpy.AddError("error on line: %s" % messages["line"])
+        #arcpy.AddError("error in file name: %s" % messages["filename"])
+        #arcpy.AddError("with error message: %s" % messages["synerror"])
+        #arcpy.AddError("ArcPy Error Message: %s" % messages["arc"])
     except:
         line, filename, synerror = trace()
-        arcpy.AddError("error on line: %s" % line)
-        arcpy.AddError("error in file name: %s" % filename)
-        arcpy.AddError("with error message: %s" % synerror)
-#--------------------------------------------------------------------------
-if __name__ == "__main__":
-    #env.overwriteOutput = True
-    argv = tuple(arcpy.GetParameterAsText(i)
-    for i in range(arcpy.GetArgumentCount()))
-    main(*argv)
+        #arcpy.AddError("error on line: %s" % line)
+        #arcpy.AddError("error in file name: %s" % filename)
+        #arcpy.AddError("with error message: %s" % synerror)

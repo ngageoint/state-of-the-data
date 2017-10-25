@@ -32,7 +32,6 @@ from arcgis.geometry import filters
 from arcgis.geometry import Geometry
 
 #Import logic to create layer selection
-import create_selection_layers as csl
 import sotd_config as config
 
 non_std_date = '1901-1-1'
@@ -144,188 +143,138 @@ def get_datetime_string(s):
     dts = [dt.strftime('%Y-%m-%d') for dt in s]
     return dts
 #--------------------------------------------------------------------------
-def main(*argv):
+def temporal_currency(gis, df_current, output_features, grid_filter, geom, in_fields):
     """ main driver of program """
     try:
 
-        master_times = datetime.datetime.now()
+        out_fl = FeatureLayer(gis=gis,url=output_features)
+        out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,
+            return_all_records=True).df
 
-        gis = GIS(config.portal, config.un, config.pw)
-
-        fc = config.features_url
-        polygon_grid = config.grid_url
-        output_features = config.currency_url
-
-        in_fields = 'zi001_sdv'.upper() #str(argv[1]).upper()
-
-        return_all_records = False
-        look_back_days = config.look_back_days
-
-        dates = csl.get_dates_in_range(look_back_days)
-        where_clause = csl.form_query_string(dates)
-
-        grid_fl = FeatureLayer(url=polygon_grid)
-        grid_sdf = grid_fl.query(return_all_records=False, where=where_clause).df
-
-        geometry = grid_sdf.geometry
-        sr = {'wkid':4326}
-        sp_rel = "esriSpatialRelIntersects"
-
-        results = []
-        counter = 0
-        for idx, row in enumerate(grid_sdf.iterrows()):
-            geom = row[1].SHAPE
-            ext = [geom.extent.lowerLeft.X+.1, geom.extent.lowerLeft.Y+.1,
-                   geom.extent.upperRight.X-.1, geom.extent.upperRight.Y-.1]
-
-            new_geom = Geometry({
-                "rings" : [[[geom.extent.upperRight.X-.1, geom.extent.lowerLeft.Y+.1], [geom.extent.lowerLeft.X+.1, geom.extent.lowerLeft.Y+.1], [geom.extent.lowerLeft.X+.1, geom.extent.upperRight.Y-.1], [geom.extent.upperRight.X-.1, geom.extent.upperRight.Y-.1], [geom.extent.upperRight.X-.1, geom.extent.lowerLeft.Y+.1]]],
-                "spatialReference" : {"wkid" : 4326}
-            })
-
-            print(new_geom.extent)
-            grid_filter = filters._filter(new_geom, sr, sp_rel)
-            sp_filter = filters._filter(geom, sr, sp_rel)
-
-            out_fl = FeatureLayer(url=output_features)
-            out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,
-                return_all_records=True).df
-
-            print(out_sdf)
-
-            data_fl = FeatureLayer(url=fc)
-            data_sdf = data_fl.query(out_fields=",".join([in_fields]),
-                geometry_filter=sp_filter,return_geometry=True,
-                return_all_records=return_all_records).df
-
-            print("copying data_sdf to current_df")
-            df_current = data_sdf
-            ##---cut stuff above-----
-            sq = df_current['SHAPE'].disjoint(geom) == False
-            df_current = df_current[sq].copy()
-            if len(df_current) > 0:
-                dates = df_current[in_fields].tolist()
-                count = len(dates)
-                date_list_strings = [d for d in dates]
-                date_list = [get_datetime(d) for d in dates]
-                year_list = [int(x.year) for x in date_list]
-                dom_year, dom_year_count = Counter(year_list).most_common()[0]
-                dom_date, dom_date_count = Counter(get_datetime_string(date_list)).most_common()[0]
-                count_picket_fences = sum(non_std == datetime.datetime(1902,1,1,0,0) for non_std in date_list)
-                count_non_std_dates = sum(non_std == datetime.datetime(1901,1,1,0,0) for non_std in date_list) + count_picket_fences
-                date_list_minus = [x for x in date_list if (x != datetime.datetime(1901,1,1,0,0) and x != datetime.datetime(1902,1,1,0,0))]
-                if len(date_list_minus)>0:
-                    if dom_date == '1902-1-1' or dom_date == '1902-01-01':
-                        dom_date = non_std_date
-                        dom_year = non_std_year
-                        sccore = 6
-                        oldest = min(get_datetime_string(date_list_minus))
-                        newest = max(get_datetime_string(date_list_minus))
-                        change_list = [diff_date(dd) for dd in date_list_minus]
-                        count_2year = sum(x <= 2 for x in change_list)
-                        count_5year = sum((x <= 5 and x > 2) for x in change_list)
-                        count_10year = sum((x <= 10 and x > 5) for x in change_list)
-                        count_15year = sum((x <= 15 and x > 10) for x in change_list)
-                        count_15year_plus = sum(x >= 15 for x in change_list)
-                    elif dom_date == '1901-1-1' or dom_date == '1901-01-01':
-                        dom_date = 'NoInformation'
-                        dom_year = 0
-                        score = 6
-                        oldest = min(get_datetime_string(date_list_minus))
-                        newest = max(get_datetime_string(date_list_minus))
-                        change_list = [diff_date(dd) for dd in date_list_minus]
-                        count_2year = sum(x <= 2 for x in change_list)
-                        count_5year = sum((x <= 5 and x > 2) for x in change_list)
-                        count_10year = sum((x <= 10 and x > 5) for x in change_list)
-                        count_15year = sum((x <= 15 and x > 10) for x in change_list)
-                        count_15year_plus = sum(x >= 15 for x in change_list)
-                    else:
-                        dom_date = dom_date
-                        dom_year = dom_year
-                        oldest = min(get_datetime_string(date_list_minus))
-                        newest = max(get_datetime_string(date_list_minus))
-                        change_list = [diff_date(dd) for dd in date_list_minus]
-                        count_2year = sum(x <= 2 for x in change_list)
-                        count_5year = sum((x <= 5 and x > 2) for x in change_list)
-                        count_10year = sum((x <= 10 and x > 5) for x in change_list)
-                        count_15year = sum((x <= 15 and x > 10) for x in change_list)
-                        count_15year_plus = sum(x >= 15 for x in change_list)
-                        score = get_currency_score(dom_year)
+        ##---cut stuff above-----
+        sq = df_current['SHAPE'].disjoint(geom) == False
+        df_current = df_current[sq].copy()
+        if len(df_current) > 0:
+            dates = df_current[in_fields].tolist()
+            count = len(dates)
+            date_list_strings = [d for d in dates]
+            date_list = [get_datetime(d) for d in dates]
+            year_list = [int(x.year) for x in date_list]
+            dom_year, dom_year_count = Counter(year_list).most_common()[0]
+            dom_date, dom_date_count = Counter(get_datetime_string(date_list)).most_common()[0]
+            count_picket_fences = sum(non_std == datetime.datetime(1902,1,1,0,0) for non_std in date_list)
+            count_non_std_dates = sum(non_std == datetime.datetime(1901,1,1,0,0) for non_std in date_list) + count_picket_fences
+            date_list_minus = [x for x in date_list if (x != datetime.datetime(1901,1,1,0,0) and x != datetime.datetime(1902,1,1,0,0))]
+            if len(date_list_minus)>0:
+                if dom_date == '1902-1-1' or dom_date == '1902-01-01':
+                    dom_date = non_std_date
+                    dom_year = non_std_year
+                    sccore = 6
+                    oldest = min(get_datetime_string(date_list_minus))
+                    newest = max(get_datetime_string(date_list_minus))
+                    change_list = [diff_date(dd) for dd in date_list_minus]
+                    count_2year = sum(x <= 2 for x in change_list)
+                    count_5year = sum((x <= 5 and x > 2) for x in change_list)
+                    count_10year = sum((x <= 10 and x > 5) for x in change_list)
+                    count_15year = sum((x <= 15 and x > 10) for x in change_list)
+                    count_15year_plus = sum(x >= 15 for x in change_list)
+                elif dom_date == '1901-1-1' or dom_date == '1901-01-01':
+                    dom_date = 'NoInformation'
+                    dom_year = 0
+                    score = 6
+                    oldest = min(get_datetime_string(date_list_minus))
+                    newest = max(get_datetime_string(date_list_minus))
+                    change_list = [diff_date(dd) for dd in date_list_minus]
+                    count_2year = sum(x <= 2 for x in change_list)
+                    count_5year = sum((x <= 5 and x > 2) for x in change_list)
+                    count_10year = sum((x <= 10 and x > 5) for x in change_list)
+                    count_15year = sum((x <= 15 and x > 10) for x in change_list)
+                    count_15year_plus = sum(x >= 15 for x in change_list)
                 else:
-                    if dom_date == '1902-01-01':
-                        dom_date = non_std_date
-                        dom_year = non_std_year
-                        oldest = non_std_date
-                        newest = non_std_date
-                        change_list = 0
-                        count_2year = 0
-                        count_5year = 0
-                        count_10year = 0
-                        count_15year = 0
-                        count_15year_plus = 0
-                        score = 6
-                    else:
-                        dom_date = 'NoInformation'
-                        dom_year = 0
-                        oldest = 'NoInformation'
-                        newest = 'NoInformation'
-                        change_list = 0
-                        count_2year = 0
-                        count_5year = 0
-                        count_10year = 0
-                        count_15year = 0
-                        count_15year_plus = 0
-                        score = 6
-
-                out_sdf[FIELDS[0]][0]=dom_date
-                out_sdf[FIELDS[1]][0]=dom_date_count
-                out_sdf[FIELDS[2]][0]=round(dom_date_count * 100.0 / count,1)
-                out_sdf[FIELDS[3]][0]=dom_year
-                out_sdf[FIELDS[4]][0]=dom_year_count
-                out_sdf[FIELDS[5]][0]=round(dom_year_count * 100.0 / count,1)
-                out_sdf[FIELDS[6]][0]=oldest
-                out_sdf[FIELDS[7]][0]=newest
-                out_sdf[FIELDS[8]][0]=count_non_std_dates
-                out_sdf[FIELDS[9]][0]=round(float(count_non_std_dates) * 100.0 / count,1)
-                out_sdf[FIELDS[10]][0]=round(float(count_2year) * 100.0 / count,1)
-                out_sdf[FIELDS[11]][0]=round(float(count_5year) * 100.0 / count,1)
-                out_sdf[FIELDS[12]][0]=round(float(count_10year) * 100.0 / count,1)
-                out_sdf[FIELDS[13]][0]=round(float(count_15year) * 100.0 / count,1)
-                out_sdf[FIELDS[14]][0]=round(float(count_15year_plus) * 100.0 / count,1)
-                out_sdf[FIELDS[15]][0]=int(count)
-                out_sdf[FIELDS[16]][0]=int(score)
-
+                    dom_date = dom_date
+                    dom_year = dom_year
+                    oldest = min(get_datetime_string(date_list_minus))
+                    newest = max(get_datetime_string(date_list_minus))
+                    change_list = [diff_date(dd) for dd in date_list_minus]
+                    count_2year = sum(x <= 2 for x in change_list)
+                    count_5year = sum((x <= 5 and x > 2) for x in change_list)
+                    count_10year = sum((x <= 10 and x > 5) for x in change_list)
+                    count_15year = sum((x <= 15 and x > 10) for x in change_list)
+                    count_15year_plus = sum(x >= 15 for x in change_list)
+                    score = get_currency_score(dom_year)
             else:
-                out_sdf[FIELDS[0]][0]="None"
-                out_sdf[FIELDS[1]][0]=0
-                out_sdf[FIELDS[2]][0]=0
-                out_sdf[FIELDS[3]][0]=0
-                out_sdf[FIELDS[4]][0]=0
-                out_sdf[FIELDS[5]][0]=0
-                out_sdf[FIELDS[6]][0]="None"
-                out_sdf[FIELDS[7]][0]="None"
-                out_sdf[FIELDS[8]][0]=0
-                out_sdf[FIELDS[9]][0]=0
-                out_sdf[FIELDS[10]][0]=0
-                out_sdf[FIELDS[11]][0]=0
-                out_sdf[FIELDS[12]][0]=0
-                out_sdf[FIELDS[13]][0]=0
-                out_sdf[FIELDS[14]][0]=0
-                out_sdf[FIELDS[15]][0]=0
-                out_sdf[FIELDS[16]][0]=0
+                if dom_date == '1902-01-01':
+                    dom_date = non_std_date
+                    dom_year = non_std_year
+                    oldest = non_std_date
+                    newest = non_std_date
+                    change_list = 0
+                    count_2year = 0
+                    count_5year = 0
+                    count_10year = 0
+                    count_15year = 0
+                    count_15year_plus = 0
+                    score = 6
+                else:
+                    dom_date = 'NoInformation'
+                    dom_year = 0
+                    oldest = 'NoInformation'
+                    newest = 'NoInformation'
+                    change_list = 0
+                    count_2year = 0
+                    count_5year = 0
+                    count_10year = 0
+                    count_15year = 0
+                    count_15year_plus = 0
+                    score = 6
 
-            out_sdf_as_featureset = out_sdf.to_featureset()
-            print(out_sdf_as_featureset)
-            out_fl.edit_features(updates=out_sdf_as_featureset)
+            out_sdf[FIELDS[0]][0]=dom_date
+            out_sdf[FIELDS[1]][0]=dom_date_count
+            out_sdf[FIELDS[2]][0]=round(dom_date_count * 100.0 / count,1)
+            out_sdf[FIELDS[3]][0]=dom_year
+            out_sdf[FIELDS[4]][0]=dom_year_count
+            out_sdf[FIELDS[5]][0]=round(dom_year_count * 100.0 / count,1)
+            out_sdf[FIELDS[6]][0]=oldest
+            out_sdf[FIELDS[7]][0]=newest
+            out_sdf[FIELDS[8]][0]=count_non_std_dates
+            out_sdf[FIELDS[9]][0]=round(float(count_non_std_dates) * 100.0 / count,1)
+            out_sdf[FIELDS[10]][0]=round(float(count_2year) * 100.0 / count,1)
+            out_sdf[FIELDS[11]][0]=round(float(count_5year) * 100.0 / count,1)
+            out_sdf[FIELDS[12]][0]=round(float(count_10year) * 100.0 / count,1)
+            out_sdf[FIELDS[13]][0]=round(float(count_15year) * 100.0 / count,1)
+            out_sdf[FIELDS[14]][0]=round(float(count_15year_plus) * 100.0 / count,1)
+            out_sdf[FIELDS[15]][0]=int(count)
+            out_sdf[FIELDS[16]][0]=int(score)
 
-            del df_current
-            del ext
-            del geom
+        else:
+            out_sdf[FIELDS[0]][0]="None"
+            out_sdf[FIELDS[1]][0]=0
+            out_sdf[FIELDS[2]][0]=0
+            out_sdf[FIELDS[3]][0]=0
+            out_sdf[FIELDS[4]][0]=0
+            out_sdf[FIELDS[5]][0]=0
+            out_sdf[FIELDS[6]][0]="None"
+            out_sdf[FIELDS[7]][0]="None"
+            out_sdf[FIELDS[8]][0]=0
+            out_sdf[FIELDS[9]][0]=0
+            out_sdf[FIELDS[10]][0]=0
+            out_sdf[FIELDS[11]][0]=0
+            out_sdf[FIELDS[12]][0]=0
+            out_sdf[FIELDS[13]][0]=0
+            out_sdf[FIELDS[14]][0]=0
+            out_sdf[FIELDS[15]][0]=0
+            out_sdf[FIELDS[16]][0]=0
 
-        del fc
-        del data_sdf
+        return out_sdf, out_fl
 
-        print("Total Time %s" % (datetime.datetime.now() - master_times))
+##        out_sdf_as_featureset = out_sdf.to_featureset()
+##        print(out_sdf_as_featureset)
+##        out_fl.edit_features(updates=out_sdf_as_featureset)
+##
+##        del df_current
+##        del ext
+##        del geom
+
     except FunctionError as f_e:
         messages = f_e.args[0]
 ##        arcpy.AddError("error in function: %s" % messages["function"])
@@ -339,6 +288,4 @@ def main(*argv):
 ##        arcpy.AddError("error in file name: %s" % filename)
 ##        arcpy.AddError("with error message: %s" % synerror)
 #--------------------------------------------------------------------------
-if __name__ == "__main__":
-    #env.overwriteOutput = True
-    main()
+
