@@ -15,23 +15,37 @@ Copyright: Esri
 License: TBD
 -----------------------------------------------------------------------------"""
 
-import pandas as pd
-import numpy as np
 import os
+import ast
 import sys
+import time
+import xlrd
+import numpy as np
+import pandas as pd
+import datetime
+import platform
+import itertools
+import traceback
+from xlrd.sheet import ctype_text
 from collections import Counter
-from geodataset import SpatialDataFrame
+
+#Using the ArcGIS API for Python
+import arcgis
+from arcgis.gis import GIS
+from arcgis.features import SpatialDataFrame
+from arcgis.features import FeatureLayer
+from arcgis.geometry import filters
+from arcgis.geometry import Geometry
+from arcgis.geometry import Polyline, Point, Polygon
+
+import sotd_config as config
+import create_selection_layers as csl
 
 import arcpy
 from arcpy import env
 from arcpy import da
-if sys.version_info.major == 3:
-    from arcpy import mp as mapping
-else:
-    from arcpy import mapping
 
-sum_fields = ('OBJECTID',
-              'MEAN_DEF_CNT',
+SUM_FIELDS = ['MEAN_DEF_CNT',
               'MEDIAN_DEF_CNT',
               'MIN_DEF_CNT',
               'MAX_DEF_CNT',
@@ -46,11 +60,18 @@ sum_fields = ('OBJECTID',
               'FEATURE_CNT',
               'PRI_ATTR_DEF_CNT',
               'SEC_ATTR_DEF_CNT',
-              'LABEL')
+              'LC_SCORE']
 
-#error_field = ('DEFICIENCY','DEFICIENCY_CNT')
+FIELDS = ['DEFICIENCY',
+            'FEATURE_CLASS',
+            'SUBTYPE',
+            'ORIG_OID',
+            'DEFICIENCY_CNT',
+            'SHAPE']
+
 
 default = (-1,-1,-1,-1,-1,-1,-1,0,0,'N/A','N/A',0,0,0,0,0)
+empty = (-999999, '', None, 'noInformation','None', 'Null', 'NULL', -999999.0)
 
 #--------------------------------------------------------------------------
 class FunctionError(Exception):
@@ -72,80 +93,84 @@ def trace():
     #
     synerror = traceback.format_exc().splitlines()[-1]
     return line, __file__, synerror
+
+def create_attr_dict(filename, check):
+    """Creates and attribute dictionary"""
+    xl_workbook = xlrd.open_workbook(filename)
+    specificAttributeString = '{'
+    specificAttributeDict = {}
+    xl_sheet = xl_workbook.sheet_by_name(check)
+    for row in range(xl_sheet.nrows):
+        if row>0:
+            cell = xl_sheet.cell(row,8)
+            specificAttributeString += cell.value
+    specificAttributeDict = ast.literal_eval(specificAttributeString[:-1] + '}')
+    return specificAttributeDict, check
+
+def get_fc_domains(gdb):
+    domains = da.ListDomains(gdb)
+    domain_dict = {}
+    for domain in domains:
+        if 'FCODE' in domain.name:
+            domain_dict.update(domain.codedValues)
+
+    return domain_dict
+
+#-------------------------------------------------------------------------------
+def get_field_alias(fc):
+    fields = arcpy.ListFields(fc)
+
+    field_dict = {}
+    for field in fields:
+        field_dict[field.name] = field.aliasName
+
+    return field_dict
+
 #--------------------------------------------------------------------------
-def validate_workspace(wrksp):
-    """
-    Validates and ensures output workspace exists
-    """
-    try:
-        if wrksp.lower().endswith('.gdb') and \
-           os.path.isdir(wrksp) == False:
-                return arcpy.CreateFileGDB_management(out_folder_path=os.path.dirname(wrksp),
-                                                     out_name=os.path.basename(wrksp))[0]
-        elif wrksp.lower().endswith('.sde') and \
-             os.path.isfile(wrksp) == False:
-            raise ValueError("SDE workspace must exist before using it.")
-        elif os.path.isdir(wrksp) == False:
-            os.makedirs(wrksp)
-            return wrksp
-        else:
-            return wrksp
-    except:
-        line, filename, synerror = trace()
-        raise FunctionError(
-                {
-                "function": "validate_workspace",
-                "line": line,
-                "filename": filename,
-                "synerror": synerror,
-                "arc" : str(arcpy.GetMessages(2))
-                }
-                )
-#--------------------------------------------------------------------------
-def extend_table(table, rows=None):
-    """
-    Adds the required columns to the table and appends new records if
-    given.
-    """
-    try:
-        if rows is None:
-            rows = []
-        dtypes = np.dtype(
-            [
-                ('_ID', np.int),
-                ('MEAN_DEF_CNT', np.float64),
-                ('MEDIAN_DEF_CNT', np.int32),
-                ('MIN_DEF_CNT', np.int32),
-                ('MAX_DEF_CNT', np.int32),
-                #STandard deviation
-                ('PRI_NUM_DEF', np.int32),
-                ('SEC_NUM_DEF', np.int32),
-                ('PER_PRI', np.float64),
-                ('PER_SEC', np.float64),
-                ("PRI_ATTR_DEF", '|S20'), # pri_attr
-                ("SEC_ATTR_DEF", '|S20'),
-                ('PRI_ATTR_DEF_PER', np.float64),
-                ('SEC_ATTR_DEF_PER', np.float64),
-                ('FEATURE_CNT', np.int32),
-                ('PRI_ATTR_DEF_CNT', np.float64),
-                ('SEC_ATTR_DEF_CNT', np.float64),
-                ('LC_SCORE', np.int32)
-            ]
-        )
-        array = np.array(rows, dtypes)
-        da.ExtendTable(table, "OID@", array, "_ID", False)
-        return table
-    except:
-        line, filename, synerror = trace()
-        raise FunctionError(
-                {
-                "function": "extend_table",
-                "line": line,
-                "filename": filename,
-                "synerror": synerror,
-                "arc" : str(arcpy.GetMessages(2))
-                }
-        )
+##def extend_table(table, rows=None):
+##    """
+##    Adds the required columns to the table and appends new records if
+##    given.
+##    """
+##    try:
+##        if rows is None:
+##            rows = []
+##        dtypes = np.dtype(
+##            [
+##                ('_ID', np.int),
+##                ('MEAN_DEF_CNT', np.float64),
+##                ('MEDIAN_DEF_CNT', np.int32),
+##                ('MIN_DEF_CNT', np.int32),
+##                ('MAX_DEF_CNT', np.int32),
+##                #STandard deviation
+##                ('PRI_NUM_DEF', np.int32),
+##                ('SEC_NUM_DEF', np.int32),
+##                ('PER_PRI', np.float64),
+##                ('PER_SEC', np.float64),
+##                ("PRI_ATTR_DEF", '|S20'), # pri_attr
+##                ("SEC_ATTR_DEF", '|S20'),
+##                ('PRI_ATTR_DEF_PER', np.float64),
+##                ('SEC_ATTR_DEF_PER', np.float64),
+##                ('FEATURE_CNT', np.int32),
+##                ('PRI_ATTR_DEF_CNT', np.float64),
+##                ('SEC_ATTR_DEF_CNT', np.float64),
+##                ('LC_SCORE', np.int32)
+##            ]
+##        )
+##        array = np.array(rows, dtypes)
+##        da.ExtendTable(table, "OID@", array, "_ID", False)
+##        return table
+##    except:
+##        line, filename, synerror = trace()
+##        raise FunctionError(
+##                {
+##                "function": "extend_table",
+##                "line": line,
+##                "filename": filename,
+##                "synerror": synerror,
+##                "arc" : str(arcpy.GetMessages(2))
+##                }
+##        )
 #--------------------------------------------------------------------------
 def most_common(lst):
 
@@ -234,126 +259,116 @@ def get_answers(oid, err, attr, feature_count):
             sec_attr_percent, count, pri_attr_count,
             sec_attr_count, lc_score)
 #--------------------------------------------------------------------------
-def main(*argv):
-    """ main driver of program """
+def logical_consisitency(gis, template_fc, template_gdb,
+            filename, tabname,
+            data_sdf, input_features, output_features,
+            grid_filter, geom,
+            def_cnt_field, def_field):
+
     try:
-        attr_features = argv[0]
-        sql_clause = argv[1]
-        polygon_grid = argv[2]
-        error_field_count = str(argv[3]) #'NULL_COUNT'#
-        error_field_def = str(argv[4]) #'NULL_COLUMNS'#
-        output_fc = argv[5]
-        out_fc_exists = arcpy.Exists(output_fc)
+        stList = set(data_sdf['F_CODE'].values)
+        fc = input_features
 
-        #  Local Variable
-        #
-        scratchFolder = env.scratchFolder
-        scratchGDB = env.scratchGDB
-        results = []
-        #  Logic
-        #
-        if not out_fc_exists:
-            output_gdb = validate_workspace(os.path.dirname(output_fc))
-            #  Create the grid
-            #
-            out_grid = arcpy.CopyFeatures_management(polygon_grid, output_fc)[0]
-            out_grid = extend_table(out_grid)
-            where_clause=None
-        else:
-            arcpy.MakeFeatureLayer_management(output_fc, "lyr")
-            arcpy.SelectLayerByLocation_management("lyr", "HAVE_THEIR_CENTER_IN", polygon_grid)
-            oids = [row[0] for row in arcpy.da.SearchCursor("lyr", "OID@")]
-            if len(oids) >1:
-                oids_string = str(tuple(oids))
-            else:
-                oids_string = str('('+ str(oids[0]) + ')')
+        alias_table = get_field_alias(template_fc)
+        fc_domain_dict = get_fc_domains(template_gdb)
 
-            where_clause = 'OBJECTID IN ' + oids_string
+        specificAttributeDict, attrCheck = create_attr_dict(filename, tabname)
 
-        #  Process the Data
-        #
-        error_field = (error_field_def, error_field_count)
-        grid_sdf = SpatialDataFrame.from_featureclass(filename=output_fc,
-                                            where_clause=where_clause)
-        if sql_clause:
-            attr_sdf = SpatialDataFrame.from_featureclass(attr_features,
-                                                      fields=error_field,
-                                                      where_clause=sql_clause)
-        else:
-            attr_sdf = SpatialDataFrame.from_featureclass(attr_features,
-                                                      fields=error_field)
-        index = attr_sdf.sindex
-        for idx, row in enumerate(grid_sdf.iterrows()):
-            errors = []
-            attrs = []
-            geom = row[1].SHAPE
-            oid = row[1].OBJECTID
-            print(str(oid))
-            ext = [geom.extent.lowerLeft.X, geom.extent.lowerLeft.Y,
-                   geom.extent.upperRight.X, geom.extent.upperRight.Y]
-            row_oids = list(index.intersect(ext))
-            df_current = attr_sdf.loc[row_oids]#.copy()
-            sq = df_current.geometry.disjoint(geom) == False
-            fcount = len(df_current[sq])  # Total Count
-            q2 = df_current[error_field_count] > 0
-            #& q2
-            df_current = df_current[sq].copy() # Get the # of features with deficiency_cnt > 0
-            #print("here")
-            if fcount>0: #len(df_current) > 0:
-                errors += df_current[error_field_count].tolist()
-                arcpy.AddMessage(str(errors))
-                def process(x):
-                    print(x)
-                    return [va for va in x.replace(' ', '').split('|')[-1].split(',') if len(va) > 1]
-                for e in df_current[error_field_def].apply(process).tolist():
-                    attrs += e
-                    del e
-            row = get_answers(oid=oid,
-                              err=errors,
-                              attr=attrs,
-                              feature_count=fcount)
-            results.append(row)
-            if len(results) > 250:
-                extend_table(table=output_fc, rows=results)
-                results = []
-            del idx
-            del row
-            del errors
-            del attrs
-            del geom
-            del oid
-            del ext
-            del row_oids
-            del df_current
-            del sq
-            del q2
-        if len(results) > 0:
-            extend_table(table=output_fc, rows=results)
-        del index
-        del results
-        del grid_sdf
-        del attr_sdf
+        temp_result_df = pd.DataFrame(columns = FIELDS)#, dtypes=DTYPES)
+
+        geoms=[]
+        counter=0
+        total_feature_count = len(data_sdf)
+        for idx, row in data_sdf.iterrows():
+            #print(row['F_CODE'])
+            if row['F_CODE'] in stList:
+                if row['F_CODE'] in specificAttributeDict:
+                    vals = []
+                    vals = [alias_table[i] for i in specificAttributeDict[row['F_CODE']] \
+                                               if row[i] in empty]
+
+                    line = row['SHAPE']
+                    def_count = len(vals)
+                    polyline = Polyline(line)
+                    geoms.append(polyline)
+                    if def_count > 0:
+                        fs = ",".join(vals)
+                        oid = row['OBJECTID']
+                        ERROR = str(fc) + r" | " + str(fc_domain_dict[row['F_CODE']]) + r" | OID: " + str(oid) + r" | " + fs
+
+                        temp_result_df.set_value(counter, FIELDS[0],fs)
+                        temp_result_df.set_value(counter, FIELDS[1],fc)
+                        temp_result_df.set_value(counter, FIELDS[2],(fc_domain_dict[row['F_CODE']]))
+                        temp_result_df.set_value(counter, FIELDS[3],round(oid))
+                        temp_result_df.set_value(counter, FIELDS[4],len(vals))
+
+
+                    else:
+                        temp_result_df.set_value(counter, FIELDS[0],'N/A')
+                        temp_result_df.set_value(counter, FIELDS[1],fc)
+                        temp_result_df.set_value(counter, FIELDS[2],(fc_domain_dict[row['F_CODE']]))
+                        temp_result_df.set_value(counter, FIELDS[3],round(oid))
+                        temp_result_df.set_value(counter, FIELDS[4],len(vals))
+                    counter = counter+1
+        assessed_feature_count = len(temp_result_df)
+
+        attr_sdf = SpatialDataFrame(temp_result_df, geometry=geoms)
+
+        out_fl = FeatureLayer(gis=gis,url=output_features)
+        out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,return_all_records=True).df
+
+        df_current = attr_sdf
+        fcount = len(df_current)
+
+        error_field_count = def_cnt_field
+        error_field_def = def_field
+
+        errors = []
+        attrs = []
+        if fcount>0: #len(df_current) > 0:
+            errors += df_current[error_field_count].tolist()
+            def process(x):
+                #print(x)
+                return [va for va in x.replace(' ', '').split('|')[-1].split(',') if len(va) > 1]
+            for e in df_current[error_field_def].apply(process).tolist():
+                attrs += e
+                del e
+
+        results = get_answers(0,errors,attrs, fcount)
+
+        out_sdf[SUM_FIELDS[0]][0]=results[1]
+        out_sdf[SUM_FIELDS[1]][0]=results[2]
+        out_sdf[SUM_FIELDS[2]][0]=results[3]
+        out_sdf[SUM_FIELDS[3]][0]=results[4]
+        out_sdf[SUM_FIELDS[4]][0]=results[5]
+        out_sdf[SUM_FIELDS[5]][0]=results[6]
+        out_sdf[SUM_FIELDS[6]][0]=results[7]
+        out_sdf[SUM_FIELDS[7]][0]=results[8]
+        out_sdf[SUM_FIELDS[8]][0]=results[9]
+        out_sdf[SUM_FIELDS[9]][0]=results[10]
+        out_sdf[SUM_FIELDS[10]][0]=results[11]
+        out_sdf[SUM_FIELDS[11]][0]=results[12]
+        out_sdf[SUM_FIELDS[12]][0]=results[13]
+        out_sdf[SUM_FIELDS[13]][0]=results[14]
+        out_sdf[SUM_FIELDS[14]][0]=results[15]
+        out_sdf[SUM_FIELDS[15]][0]=results[16]
+
+        print(out_sdf.columns.values)
+
+        return out_sdf, out_fl
+
     except arcpy.ExecuteError:
         line, filename, synerror = trace()
-        arcpy.AddError("error on line: %s" % line)
-        arcpy.AddError("error in file name: %s" % filename)
-        arcpy.AddError("with error message: %s" % synerror)
-        arcpy.AddError("ArcPy Error Message: %s" % arcpy.GetMessages(2))
+
     except FunctionError as f_e:
         messages = f_e.args[0]
-        arcpy.AddError("error in function: %s" % messages["function"])
-        arcpy.AddError("error on line: %s" % messages["line"])
-        arcpy.AddError("error in file name: %s" % messages["filename"])
-        arcpy.AddError("with error message: %s" % messages["synerror"])
-        arcpy.AddError("ArcPy Error Message: %s" % messages["arc"])
+
     except:
         line, filename, synerror = trace()
-        arcpy.AddError("error on line: %s" % line)
-        arcpy.AddError("error in file name: %s" % filename)
-        arcpy.AddError("with error message: %s" % synerror)
+
 #--------------------------------------------------------------------------
-if __name__ == "__main__":
-    #env.overwriteOutput = True
-    argv = tuple(arcpy.GetParameterAsText(i)
-    for i in range(arcpy.GetArgumentCount()))
-    main(*argv)
+##if __name__ == "__main__":
+##    #env.overwriteOutput = True
+##    argv = tuple(arcpy.GetParameterAsText(i)
+##    for i in range(arcpy.GetArgumentCount()))
+##    main(*argv)

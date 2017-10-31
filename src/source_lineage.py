@@ -20,7 +20,6 @@ from __future__ import print_function
 import os
 import sys
 import numpy as np
-#import logging
 import datetime
 
 #Using the ArcGIS API for Python
@@ -35,10 +34,6 @@ import sotd_config as config
 
 ###########################################################################
 module = __file__
-#logging.basicConfig(stream=sys.stderr, level=logging.DEBUG,
-#                    format='%(name)s (%(levelname)s): %(message)s')
-#log = logging.getLogger(module)
-#log.diabled = True
 ###########################################################################
 
 FIELDS = ('SOURCE_LIST',

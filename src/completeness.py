@@ -31,16 +31,6 @@ from arcgis.features import SpatialDataFrame
 from arcgis.geometry import filters
 from arcgis.geometry import Geometry
 
-##from geodataset import SpatialDataFrame
-##
-##import arcpy
-##from arcpy import env
-##from arcpy import da
-##if sys.version_info.major == 3:
-##    from arcpy import mp as mapping
-##else:
-##    from arcpy import mapping
-
 FIELDS = ['TDS_DENSITY',
     'COMP_DENSITY',
     'COMPLETENESS_VALUE',
