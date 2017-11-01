@@ -1,4 +1,4 @@
-from .osm_utils import Format, Period, Filters, OSM_Features
+from runner.osm_utils import Format, Period, Filters, OSM_Features
 
 from arcgis.geometry import Point, Polyline, Polygon
 from arcgis.features import SpatialDataFrame
@@ -225,20 +225,20 @@ def build_ways_dict(n_list, g_type, w_list):
     return way_dict
 
 
-if __name__ == "__main__":
-
-    start = time.time()
-
-    box = '(37.708132, -122.513617, 37.832132, -122.349607)'
-    tag = 'historic'
-
-    point_sdf = gen_osm_sdf('point', box, tag)
-    point_sdf.to_featureclass(r'C:\Temp\Examples.gdb', 'Point', True)
-
-    line_sdf = gen_osm_sdf('line', box, tag)
-    line_sdf.to_featureclass(r'C:\Temp\Examples.gdb', 'Line', True)
-
-    polygon_sdf = gen_osm_sdf('polygon', box, tag)
-    polygon_sdf.to_featureclass(r'C:\Temp\Examples.gdb', 'Polygon', True)
-
-    print('Execution in Seconds: ', time.time() - start)
+##if __name__ == "__main__":
+##
+##    start = time.time()
+##
+##    box = '(37.708132, -122.513617, 37.832132, -122.349607)'
+##    tag = 'historic'
+##
+##    point_sdf = gen_osm_sdf('point', box, tag)
+##    point_sdf.to_featureclass(r'C:\Temp\Examples.gdb', 'Point', True)
+##
+##    line_sdf = gen_osm_sdf('line', box, tag)
+##    line_sdf.to_featureclass(r'C:\Temp\Examples.gdb', 'Line', True)
+##
+##    polygon_sdf = gen_osm_sdf('polygon', box, tag)
+##    polygon_sdf.to_featureclass(r'C:\Temp\Examples.gdb', 'Polygon', True)
+##
+##    print('Execution in Seconds: ', time.time() - start)
