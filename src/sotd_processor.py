@@ -24,28 +24,16 @@ def create_layers(grid, population, output_fc):
 
     return them_acc_fc
 
-def processor():
-
-    master_times = datetime.datetime.now()
-
-    gis = GIS(config.portal, config.un, config.pw)
-
-    fc = config.features_url
-    polygon_grid = config.grid_url
-    output_features = config.currency_url
-
-    #in_fields = ",".join([config.currency_field, config.search_field,
-    #            config.value_field, config.positional_acc_field,
-    #            config.thematic_acc_field])
-
+def process_by_metadata(gis):
     return_all_records = False
+
     look_back_days = config.look_back_days
 
     dates = csl.get_dates_in_range(look_back_days)
     where_clause = csl.form_query_string(dates)
 
-    grid_fl = FeatureLayer(url=polygon_grid)
-    grid_sdf = grid_fl.query(return_all_records=False, where=where_clause).df
+    grid_fl = FeatureLayer(url=config.grid_url)
+    grid_sdf = grid_fl.query(return_all_records=return_all_records, where=where_clause).df
 
     geometry = grid_sdf.geometry
     sr = {'wkid':4326}
@@ -53,19 +41,16 @@ def processor():
 
     for idx, row in enumerate(grid_sdf.iterrows()):
         geom = row[1].SHAPE
-        ext = [geom.extent.lowerLeft.X+.1, geom.extent.lowerLeft.Y+.1,
-               geom.extent.upperRight.X-.1, geom.extent.upperRight.Y-.1]
 
         new_geom = Geometry({
             "rings" : [[[geom.extent.upperRight.X-.1, geom.extent.lowerLeft.Y+.1], [geom.extent.lowerLeft.X+.1, geom.extent.lowerLeft.Y+.1], [geom.extent.lowerLeft.X+.1, geom.extent.upperRight.Y-.1], [geom.extent.upperRight.X-.1, geom.extent.upperRight.Y-.1], [geom.extent.upperRight.X-.1, geom.extent.lowerLeft.Y+.1]]],
             "spatialReference" : {"wkid" : 4326}
         })
 
-        print(new_geom.extent)
         grid_filter = filters._filter(new_geom, sr, sp_rel)
         sp_filter = filters._filter(geom, sr, sp_rel)
 
-        data_fl = FeatureLayer(url=fc)
+        data_fl = FeatureLayer(url=config.features_url)
         #out_fields=in_fields,
         data_sdf = data_fl.query(geometry_filter=sp_filter,return_geometry=True,
             return_all_records=return_all_records).df
@@ -119,7 +104,15 @@ def processor():
         #update_features(them_acc_sdf, them_acc_fl)
         print('Completeness Updated')
 
-    print("Total Time %s" % (datetime.datetime.now() - master_times))
+    return
+
+def process_by_grid(gis):
+    return_all_records = False
+
+    sl_sdf, sl_fl = sl.source_lineage_by_grids(gis, config.features_url, config.source_lineage_url,
+                config.search_field, config.value_field, search_val=1001)
+
+    return sl_sdf, sl_fl
 
 def update_features(df, feature_layer):
     out_sdf_as_featureset = df.to_featureset()
@@ -127,7 +120,31 @@ def update_features(df, feature_layer):
     feature_layer.edit_features(updates=out_sdf_as_featureset)
     print(feature_layer)
 
+    return feature_layer
+
+def processor():
+
+    master_times = datetime.datetime.now()
+
+    gis = GIS(config.portal, config.un, config.pw)
+
+    #in_fields = ",".join([config.currency_field, config.search_field,
+    #            config.value_field, config.positional_acc_field,
+    #            config.thematic_acc_field])
+
+    if config.grid_url:
+        print('Processing based on Metadata Grids.')
+        process_by_metadata(gis)
+    else:
+        print('Processing all grids in feature service.')
+        result_sdf, result_fl = process_by_grid(gis)
+        print(result_sdf)
+        print(result_fl)
+
+    print("Total Time %s" % (datetime.datetime.now() - master_times))
+
+    return gis
+
 #-------------------------------------------------------------------------------
 if __name__ == "__main__":
-    #env.overwriteOutput = True
     processor()

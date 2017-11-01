@@ -77,7 +77,96 @@ def trace():
     synerror = traceback.format_exc().splitlines()[-1]
     return line, __file__, synerror
 
-def source_lineage(gis, df_current, output_features, grid_filter, geom, search_field, value_field):
+def source_lineage_by_grids(gis, input_features, output_features, search_field, value_field, search_val=1001):
+    try:
+
+        out_fl = FeatureLayer(gis=gis,url=output_features)
+        out_sdf = out_fl.query(return_geometry=True, return_all_records=True).df
+
+        print(out_sdf)
+
+        sr = {'wkid':4326}
+        sp_rel = "esriSpatialRelIntersects"
+
+        for idx, row in enumerate(out_sdf.iterrows()):
+            print(idx)
+            geom = row[1].SHAPE
+
+            sp_filter = filters._filter(geom, sr, sp_rel)
+
+            data_fl = FeatureLayer(url=input_features)
+            #out_fields=in_fields,
+            df_sub = data_fl.query(geometry_filter=sp_filter,
+                return_geometry=True,
+                return_all_records=False,
+                out_fields = ",".join([search_field, value_field])).df
+
+            if len(df_sub)>0:
+
+                #print(df_sub.head())
+
+                #df_sub = df_current.loc[df_current.disjoint(geom) == False].copy()
+                #df_sub = df = df_sub.loc[df_sub[search_field] == search_val].copy()
+
+                df_sub = df_sub.replace({np.nan: "NULL"})
+
+                grp = df_sub.groupby(by=value_field).size() # Get the counts.
+                #print(grp)
+
+                #print(df_sub.head())
+
+                # sort the values to get the biggest on the top
+                #pandas 0.18
+                try:
+                    grp.sort_values(axis=0, ascending=False,
+                                inplace=True, kind='quicksort',
+                                na_position='last')
+                #pandas 0.16
+                except:
+                    grp.sort(axis=0, ascending=False,
+                                inplace=True, kind='quicksort',
+                                na_position='last')
+
+                #test = df_sub[value_field].unique().tolist()
+                #print(",".join(test))
+
+                if len(grp) > 1:
+                    grp = grp.head(2)
+                    out_sdf.set_value(idx,FIELDS[0],",".join(filter(None, df_sub[value_field].unique().tolist())))
+                    out_sdf.set_value(idx,FIELDS[1],grp.index[0])
+                    out_sdf.set_value(idx,FIELDS[2],int(grp[0]))
+                    out_sdf.set_value(idx,FIELDS[3],float(grp[0]) * 100.0 / float(len(df_sub)))
+                    out_sdf.set_value(idx,FIELDS[4],grp.index[1])
+                    out_sdf.set_value(idx,FIELDS[5],int(grp[1]))
+                    out_sdf.set_value(idx,FIELDS[6],float(grp[1]) * 100.0 / float(len(df_sub)))
+
+                elif len(grp) == 0:
+                    out_sdf.set_value(idx,FIELDS[0],'None')
+                    out_sdf.set_value(idx,FIELDS[1],'None')
+                    out_sdf.set_value(idx,FIELDS[2],0)
+                    out_sdf.set_value(idx,FIELDS[3],float(0))
+                    out_sdf.set_value(idx,FIELDS[4],'None')
+                    out_sdf.set_value(idx,FIELDS[5],0)
+                    out_sdf.set_value(idx,FIELDS[6],float(0))
+
+                elif len(grp) == 1:
+                    out_sdf.set_value(idx,FIELDS[0],",".join(filter(None, df_sub[value_field].unique().tolist())))
+                    out_sdf.set_value(idx,FIELDS[1],grp.index[0])
+                    out_sdf.set_value(idx,FIELDS[2],int(grp[0]))
+                    out_sdf.set_value(idx,FIELDS[3],float(grp[0]) * 100.0 / float(len(df_sub)))
+                    out_sdf.set_value(idx,FIELDS[4],'None')
+                    out_sdf.set_value(idx,FIELDS[5],0)
+                    out_sdf.set_value(idx,FIELDS[6],float(0))
+            else:
+                print("No Data")
+
+        return out_sdf, out_fl
+
+    except FunctionError as f_e:
+        messages = f_e.args[0]
+        print('EXCEPTION HIT')
+
+def source_lineage(gis, df_current, output_features, grid_filter, geom, search_field, value_field, search_val=1001):
     """ main driver of program """
     try:
 
@@ -86,7 +175,9 @@ def source_lineage(gis, df_current, output_features, grid_filter, geom, search_f
             return_all_records=True).df
 
         df_sub = df_current.loc[df_current.disjoint(geom) == False].copy()
-        df_sub = df_sub.loc[df_sub[search_field] == 1001].copy()
+
+        if search_field:
+            df_sub = df_sub.loc[df_sub[search_field] == search_val].copy()
 
         df_sub = df_sub.replace({np.nan: "NULL"})
 
