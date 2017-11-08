@@ -19,8 +19,6 @@ def gen_osm_sdf(geom_type, bound_box, osm_tag=None, time_one=None, time_two=None
 
         query = get_query(osm_element, bound_box, osm_tag, time_one, time_two, present)
 
-        print(query)
-
         osm_response = get_osm(query)
 
         if len(osm_response) == 0:
