@@ -15,7 +15,7 @@ import logical_consistency as lc
 
 import sys
 #sys.path.append(r'C:\PROJECTS\state-of-the-data\src\osm_runner')
-from runner import osm_runner
+from osm_runner import *
 
 import create_selection_layers as csl
 import sotd_config as config
@@ -67,7 +67,7 @@ def process_by_metadata(gis):
                     str(geom.extent.upperRight.Y) + ',' + \
                     str(geom.extent.upperRight.X) + ')'
 
-        osm_sdf = osm_runner.gen_osm_sdf('line', bounding_box, osm_tag='highway')
+        osm_sdf = runner.gen_osm_sdf('line', bounding_box, osm_tag='highway', present=True)
         completeness_sdf, completeness_fl = comp.completeness(gis, osm_sdf,
                     data_sdf,config.completeness_url, grid_filter, geom)
         print(completeness_sdf)
