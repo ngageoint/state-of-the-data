@@ -4,7 +4,7 @@ Format = '[out:json]'
 
 # Period: http://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_QL
 # Section 5 / 5.1
-Period = '(._;>;);out body;'
+Output = '(._;>;);out geom qt;'
 
 # OSM Features: http://wiki.openstreetmap.org/wiki/Map_Features
 Filters = {
@@ -17,7 +17,7 @@ Filters = {
     "craft": [],
     "emergency": [],
     "geological": [],
-    "highway": ["primary", "residential"],
+    "highway": [],
     "historic": [],
     "landuse": [],
     "leisure": [],
@@ -36,9 +36,5 @@ Filters = {
     "waterway": [],
 }
 
-# OSM Feature Types
-OSM_Features = {
-    "point":   "node",
-    "line":    "way",
-    "polygon": "way"
-}
+# OSM Element Types
+Elements = {"point": "node", "line": "way", "polygon": "way"}
