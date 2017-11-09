@@ -25,13 +25,13 @@ def gen_osm_sdf(geom_type, bound_box, osm_tag=None, time_one=None, time_two=None
             raise Exception('OSM Returned Zero Results for Query: {0}'.format(query))
 
         if geom_type == 'point':
-            sdf_d = build_node_dict(osm_response)
+            val, geo = build_node_dicts(osm_response)
 
         else:
-            sdf_d = build_ways_dict(osm_response, geom_type)
+            val, geo = build_ways_dicts(osm_response, geom_type)
 
         try:
-            return SpatialDataFrame({'ID': sdf_d['ids'], 'NAME': sdf_d['names']}, geometry=sdf_d['geoms'])
+            return SpatialDataFrame(val, geometry=geo['geo'])
 
         except TypeError:
             raise Exception('Ensure ArcPy is Included in Python Interpreter')
@@ -72,7 +72,7 @@ def get_query(osm_el, b_box, o_tag, t1, t2, present_flag):
     else:
         return ';'.join([
             head,
-            ''.join( [str(osm_el), str(b_box)] ),
+            ''.join([str(osm_el), str(b_box)]),
             Output
         ])
         # E.G. [out:json];way(bounding_box);(._;>;);out geom qt;
@@ -112,79 +112,84 @@ def get_osm(osm_query):
     if r.status_code == 200:
         try:
             return r.json()['elements']
-        except:
+        except KeyError:
             raise Exception('OSM JSON Response Did Not Include Elements Key')
     else:
         raise Exception('OSM Returned Status Code: {0}'.format(r.status_code))
 
 
-def build_node_dict(n_list):
+def build_node_dicts(n_list):
 
-    node_dict = {"ids": [], "names": [], "geoms": []}
+    # Dictionary For Geometries & IDs
+    geo_dict = {"geo": []}
+    val_dict = {'osm_id': []}
 
+    # Dictionary For Incoming Tags
+    for n in n_list:
+        n_tags = n['tags'].keys()
+        for tag in n_tags:
+            if tag not in val_dict.keys():
+                val_dict[tag] = []
+
+    # Build Lists
     for n in n_list:
         try:
+            # Populate Tags
+            for tag in [key for key in val_dict.keys() if key != 'osm_id']:
+                val_dict[tag].append(str(n['tags'].get(tag, 'Null')))
+
+            # Populate Geometries & IDs
             point = Point({
                 "x": n['lon'],
                 "y": n['lat'],
                 "spatialReference": {"wkid": 4326}
             })
-
-            _name = 'Undefined'
-            tags = n.get("tags", None)
-            if tags:
-                name = tags.get("name", None)
-                if name:
-                    _name = name
-
-            node_dict['ids'].append(str(n['id']))
-            node_dict['names'].append(_name)
-            node_dict['geoms'].append(point)
+            geo_dict['geo'].append(point)
+            val_dict['osm_id'].append(str(n['id']))
 
         except Exception as ex:
             print('Node ID {0} Raised Exception: {1}'.format(n['id'], str(ex)))
 
-    if bool([vals for vals in node_dict.values() if vals != []]):
-        return node_dict
-
-    else:
-        raise Exception('OSM Query Did Produce Any Results for Query Against Geom Type: Point')
+    return val_dict, geo_dict
 
 
-def build_ways_dict(o_response, g_type):
+def build_ways_dicts(o_response, g_type):
 
+    # Extract Relevant Way Elements from OSM Response
     if g_type == 'polygon':
         ways = [e for e in o_response if e['type'] == 'way' and e['nodes'][0] == e['nodes'][-1]]
     else:
         ways = [e for e in o_response if e['type'] == 'way' and e['nodes'][0] != e['nodes'][-1]]
 
-    way_dict = {"ids": [], "names": [], "geoms": []}
+    # Dictionary For Geometries & IDs
+    geo_dict = {'geo': []}
+    val_dict = {'osm_id': []}
 
+    # Dictionary For Incoming Tags
+    for w in ways:
+        w_tags = w['tags'].keys()
+        for tag in w_tags:
+            if tag not in val_dict.keys():
+                val_dict[tag] = []
+
+    # Build Lists
     for w in ways:
         try:
-            coords = [[e['lon'], e['lat']] for e in w.get('geometry')]
+            # Populate Tags
+            for tag in [key for key in val_dict.keys() if key != 'osm_id']:
+                val_dict[tag].append(str(w['tags'].get(tag, 'Null')))
 
+            # Populate Geometries & IDs
+            coords = [[e['lon'], e['lat']] for e in w.get('geometry')]
             if g_type == 'polygon':
                 poly = Polygon({"rings":  [coords], "spatialReference": {"wkid": 4326}})
             else:
                 poly = Polyline({"paths": [coords], "spatialReference": {"wkid": 4326}})
 
-            _name = 'Undefined'
-            tags = w.get("tags", None)
-            if tags:
-                name = tags.get("name", None)
-                if name:
-                    _name = name
-
-            way_dict['ids'].append(str(w['id']))
-            way_dict['names'].append(_name)
-            way_dict['geoms'].append(poly)
+            geo_dict['geo'].append(poly)
+            val_dict['osm_id'].append(str(w['id']))
 
         except Exception as ex:
             print('Way ID {0} Raised Exception: {1}'.format(w['id'], str(ex)))
 
-    if bool([vals for vals in way_dict.values() if vals != []]):
-        return way_dict
-
-    else:
-        raise Exception('OSM Query Did Produce Any Results for Query Against Geom Type: {0}'.format(g_type))
+    return val_dict, geo_dict
