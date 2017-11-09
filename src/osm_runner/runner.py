@@ -72,7 +72,7 @@ def get_query(osm_el, b_box, o_tag, t1, t2, present_flag):
     else:
         return ';'.join([
             head,
-            ''.join( [str(osm_el), str(b_box)] ),
+            ''.join([str(osm_el), str(b_box)]),
             Output
         ])
         # E.G. [out:json];way(bounding_box);(._;>;);out geom qt;
@@ -112,7 +112,7 @@ def get_osm(osm_query):
     if r.status_code == 200:
         try:
             return r.json()['elements']
-        except:
+        except KeyError:
             raise Exception('OSM JSON Response Did Not Include Elements Key')
     else:
         raise Exception('OSM Returned Status Code: {0}'.format(r.status_code))
