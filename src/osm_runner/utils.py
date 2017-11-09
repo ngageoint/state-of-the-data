@@ -7,6 +7,8 @@ Format = '[out:json]'
 Output = '(._;>;);out geom qt;'
 
 # OSM Features: http://wiki.openstreetmap.org/wiki/Map_Features
+# E.G. "highway" = ["primary", "residential"]
+# E.G. [out:json];way["highway"~"primary|residential"](bounding_box);(._;>;);out geom qt;
 Filters = {
     "aerialway": [],
     "aeroway": [],
