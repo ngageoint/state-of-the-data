@@ -85,22 +85,26 @@ def get_query_head(f, t_1, t_2, p_flag):
 
     else:
         if p_flag:
-            if t_1:
-                diff = '[diff: "' + t_1 + '", "' + date.today().strftime('%Y-%m-%d') + '"]'
+            if t_1 and not t_2:
+                d = '[diff: "' + t_1 + '", "' + date.today().strftime('%Y-%m-%d') + '"]'
+
+            elif t_2 and not t_1:
+                d = '[diff: "' + t_2 + '", "' + date.today().strftime('%Y-%m-%d') + '"]'
+
             else:
-                raise Exception('Present Flag Requires a Value for Time One')
+                raise Exception('Invalid Parameters - Please Only Specify One Time Parameter When Using Present')
 
         else:
             if t_1 and not t_2:
-                diff = '[diff: "' + t_1 + '"]'
+                d = '[date: "' + t_1 + '"]'
 
             elif t_2 and not t_1:
-                diff = '[diff: "' + t_2 + '"]'
+                d = '[date: "' + t_2 + '"]'
 
             else:
-                diff = '[diff: "' + t_1 + '", "' + t_2 + '"]'
+                d = '[diff: "' + t_1 + '", "' + t_2 + '"]'
 
-        return ''.join([f, diff])
+    return ''.join([f, d])
 
 
 def get_osm(osm_query):
