@@ -19,22 +19,20 @@ def gen_osm_sdf(geom_type, bound_box, osm_tag=None, time_one=None, time_two=None
 
         query = get_query(osm_element, bound_box, osm_tag, time_one, time_two, present)
 
-        osm_response = get_osm(query)
+        osm_response = get_osm_elements(query)
 
         if len(osm_response) == 0:
             raise Exception('OSM Returned Zero Results for Query: {0}'.format(query))
 
         if geom_type == 'point':
-            val, geo = build_node_dicts(osm_response)
+            base_sdf = build_node_sdf(osm_response)
 
         else:
-            val, geo = build_ways_dicts(osm_response, geom_type)
+            base_sdf = build_ways_sdf(osm_response, geom_type)
 
-        try:
-            return SpatialDataFrame(val, geometry=geo['geo'])
+        sdf = fields_cleaner(base_sdf)
 
-        except TypeError:
-            raise Exception('Ensure ArcPy is Included in Python Interpreter')
+        return sdf
 
 
 def get_query(osm_el, b_box, o_tag, t1, t2, present_flag):
@@ -85,25 +83,29 @@ def get_query_head(f, t_1, t_2, p_flag):
 
     else:
         if p_flag:
-            if t_1:
-                diff = '[diff: "' + t_1 + '", "' + date.today().strftime('%Y-%m-%d') + '"]'
+            if t_1 and not t_2:
+                d = '[diff: "' + t_1 + '", "' + date.today().strftime('%Y-%m-%d') + '"]'
+
+            elif t_2 and not t_1:
+                d = '[diff: "' + t_2 + '", "' + date.today().strftime('%Y-%m-%d') + '"]'
+
             else:
-                raise Exception('Present Flag Requires a Value for Time One')
+                raise Exception('Invalid Parameters - Please Only Specify One Time Parameter When Using Present')
 
         else:
             if t_1 and not t_2:
-                diff = '[diff: "' + t_1 + '"]'
+                d = '[date: "' + t_1 + '"]'
 
             elif t_2 and not t_1:
-                diff = '[diff: "' + t_2 + '"]'
+                d = '[date: "' + t_2 + '"]'
 
             else:
-                diff = '[diff: "' + t_1 + '", "' + t_2 + '"]'
+                d = '[diff: "' + t_1 + '", "' + t_2 + '"]'
 
-        return ''.join([f, diff])
+    return ''.join([f, d])
 
 
-def get_osm(osm_query):
+def get_osm_elements(osm_query):
 
     osm_api = 'https://overpass-api.de/api/interpreter'
 
@@ -118,7 +120,7 @@ def get_osm(osm_query):
         raise Exception('OSM Returned Status Code: {0}'.format(r.status_code))
 
 
-def build_node_dicts(n_list):
+def build_node_sdf(n_list):
 
     # Dictionary For Geometries & IDs
     geo_dict = {"geo": []}
@@ -150,10 +152,14 @@ def build_node_dicts(n_list):
         except Exception as ex:
             print('Node ID {0} Raised Exception: {1}'.format(n['id'], str(ex)))
 
-    return val_dict, geo_dict
+    try:
+        return SpatialDataFrame(val_dict, geometry=geo_dict['geo'])
+
+    except TypeError:
+            raise Exception('Ensure ArcPy is Included in Python Interpreter')
 
 
-def build_ways_dicts(o_response, g_type):
+def build_ways_sdf(o_response, g_type):
 
     # Extract Relevant Way Elements from OSM Response
     if g_type == 'polygon':
@@ -192,4 +198,35 @@ def build_ways_dicts(o_response, g_type):
         except Exception as ex:
             print('Way ID {0} Raised Exception: {1}'.format(w['id'], str(ex)))
 
-    return val_dict, geo_dict
+    try:
+        return SpatialDataFrame(val_dict, geometry=geo_dict['geo'])
+
+    except TypeError:
+        raise Exception('Ensure ArcPy is Included in Python Interpreter')
+
+
+def fields_cleaner(b_sdf):
+
+    # Set Cutoff & Collect Field List
+    cutoff = int(len(b_sdf) * .99)
+    f_list = list(b_sdf)
+
+    # Flag Fields Where >= 99% of Data is Null
+    fields = []
+    for f in f_list:
+        try:
+            if b_sdf[f].dtype == 'object' and f != 'SHAPE':
+                null_count = b_sdf[f].value_counts().get('Null', 0)
+                if null_count >= cutoff:
+                    fields.append(f)
+        except:
+            print('Cannot Determine Null Count for Field {0}'.format(str(f)))
+            continue
+
+    # Drop Flagged Fields & Return
+    if fields:
+        b_sdf.drop(fields, axis=1, inplace=True)
+        return b_sdf
+
+    else:
+        return b_sdf
