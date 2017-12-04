@@ -116,6 +116,10 @@ def get_osm_elements(osm_query):
             return r.json()['elements']
         except KeyError:
             raise Exception('OSM JSON Response Did Not Include Elements Key')
+
+    elif r.status_code == 429:
+        raise Exception('OSM Request Limit Reached. Please Try Again in a Few Minutes . . .')
+
     else:
         raise Exception('OSM Returned Status Code: {0}'.format(r.status_code))
 
