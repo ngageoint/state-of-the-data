@@ -19,7 +19,7 @@ Filters = {
     "craft": [],
     "emergency": [],
     "geological": [],
-    "highway": ["residential"],
+    "highway": [],
     "historic": [],
     "landuse": [],
     "leisure": [],
