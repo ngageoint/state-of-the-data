@@ -23,7 +23,7 @@ Filters = {
     "historic": [],
     "landuse": [],
     "leisure": [],
-    "man_made": [],
+    "man_made": ["surveillance"],
     "military": [],
     "natural": [],
     "office": [],
