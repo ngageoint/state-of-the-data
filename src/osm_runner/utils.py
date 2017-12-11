@@ -20,7 +20,7 @@ Filters = {
     "emergency": [],
     "geological": [],
     "highway": [],
-    "historic": ["primary", "secondary"],
+    "historic": [],
     "landuse": [],
     "leisure": [],
     "man_made": ["surveillance"],
