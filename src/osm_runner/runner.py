@@ -21,9 +21,6 @@ def gen_osm_sdf(geom_type, bound_box, osm_tag=None, time_one=None, time_two=None
 
         osm_response = get_osm_elements(query)
 
-        if len(osm_response) == 0:
-            raise Exception('OSM Returned Zero Results for Query: {0}'.format(query))
-
         if geom_type == 'point':
             base_sdf = build_node_sdf(osm_response)
 
@@ -112,10 +109,17 @@ def get_osm_elements(osm_query):
     r = requests.get(osm_api, data=osm_query)
 
     if r.status_code == 200:
-        try:
+
+        if len(r.json()['elements']) == 0:
+
+            try:
+                raise Exception('OSM Returned Zero Results with Remark: {}'.format(r.json()['remark']))
+
+            except KeyError:
+                raise Exception('OSM Returned Zero Results for Query: {}'.format(osm_query))
+
+        else:
             return r.json()['elements']
-        except KeyError:
-            raise Exception('OSM JSON Response Did Not Include Elements Key')
 
     elif r.status_code == 429:
         raise Exception('OSM Request Limit Reached. Please Try Again in a Few Minutes . . .')
