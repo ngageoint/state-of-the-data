@@ -144,7 +144,7 @@ def get_field_alias(fc):
     return field_dict
 
 
-def most_common(lst):
+def most_common_lc_val(lst):
 
     c = Counter(lst)
     mc = c.most_common(2)
@@ -189,12 +189,12 @@ def get_answers(oid, err, attr, feature_count):
         min_err = min(err)
         max_err = max(err)
         std_err = np.std(err)
-        primary, primary_count, secondary, secondary_count = most_common(err)
+        primary, primary_count, secondary, secondary_count = most_common_lc_val(err)
         lc_score = get_lc_score(primary)
         primary_percent = round(primary_count*100.0/count,1)
         secondary_percent = round(secondary_count*100.0/count,1)
         if mean_err >0:
-            pri_attr, pri_attr_count, sec_attr, sec_attr_count = most_common(attr)
+            pri_attr, pri_attr_count, sec_attr, sec_attr_count = most_common_lc_val(attr)
             pri_attr_percent = round(pri_attr_count*100.0/feature_count,1) #count
             sec_attr_percent = round(sec_attr_count*100.0/feature_count,1) #count
         else:

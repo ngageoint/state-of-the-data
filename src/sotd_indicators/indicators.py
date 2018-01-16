@@ -167,14 +167,16 @@ def completeness(osm_sdf, gis=GIS()):
         geoms_after = df_after.clip(geom.extent)
         geoms_before = df_before.clip(geom.extent)
 
+        #after == comparison data
+        #before == your data
         geoms_before_sdf = SpatialDataFrame(geometry=geoms_before)
         geoms_after_sdf = SpatialDataFrame(geometry=geoms_after)
 
-        q_after = geoms_after_sdf['SHAPE'].JSON == json.loads('{"paths":[]}')
+        q_after = geoms_after_sdf['SHAPE'] == {"paths":[]}
         geoms_after_sdf = geoms_after_sdf[~q_after].copy()
         geoms_after_sdf.reset_index(inplace=True, drop=True)
 
-        q_before = geoms_before_sdf['SHAPE'].JSON == json.loads('{"paths":[]}')
+        q_before = geoms_before_sdf['SHAPE'] == {"paths":[]}
         geoms_before_sdf = geoms_before_sdf[~q_before].copy()
         geoms_before_sdf.reset_index(inplace=True, drop=True)
 
@@ -195,8 +197,8 @@ def completeness(osm_sdf, gis=GIS()):
             out_sdf[FIELDS[2]][0] = score
 
         elif geometry_type == "Polyline":
-            before_val = geoms_before_sdf.geometry.get_length('GEODESIC','KILOMETERS').sum()
-            after_val = geoms_after_sdf.geometry.get_length('GEODESIC','KILOMETERS').sum()
+            before_val = geoms_before_sdf.geometry.get_length('PLANAR','KILOMETERS').sum()
+            after_val = geoms_after_sdf.geometry.get_length('PLANAR','KILOMETERS').sum()
 
             if after_val > 0:
                 score = get_cp_score(ratio=before_val/after_val,
