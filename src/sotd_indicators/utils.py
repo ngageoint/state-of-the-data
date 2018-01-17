@@ -9,11 +9,6 @@ import xlrd
 import ast
 import os
 
-# Shared Between Which Functions?
-non_std_date = '1901-1-1'
-non_std_year_str = non_std_date[0:4]
-non_std_year = int(non_std_date[0:4])
-
 
 def get_pa_score(mean):
     value = 0

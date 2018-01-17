@@ -6,7 +6,6 @@ from arcgis.gis import GIS
 
 import pandas as pd
 import numpy as np
-import json
 
 
 def positional_accuracy(gis=GIS()):
@@ -172,11 +171,11 @@ def completeness(osm_sdf, gis=GIS()):
         geoms_before_sdf = SpatialDataFrame(geometry=geoms_before)
         geoms_after_sdf = SpatialDataFrame(geometry=geoms_after)
 
-        q_after = geoms_after_sdf['SHAPE'] == {"paths":[]}
+        q_after = geoms_after_sdf['SHAPE'] == {"paths": []}
         geoms_after_sdf = geoms_after_sdf[~q_after].copy()
         geoms_after_sdf.reset_index(inplace=True, drop=True)
 
-        q_before = geoms_before_sdf['SHAPE'] == {"paths":[]}
+        q_before = geoms_before_sdf['SHAPE'] == {"paths": []}
         geoms_before_sdf = geoms_before_sdf[~q_before].copy()
         geoms_before_sdf.reset_index(inplace=True, drop=True)
 

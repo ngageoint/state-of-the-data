@@ -47,3 +47,8 @@ look_back_days = 1000#900
 # Header Logic For Filter Generation
 sr = {'wkid': 4326}
 sp_rel = "esriSpatialRelIntersects"
+
+# Shared Between Functions: get_datetime / get_currency_score
+non_std_date = '1901-1-1'
+non_std_year_str = non_std_date[0:4]
+non_std_year = int(non_std_date[0:4])
