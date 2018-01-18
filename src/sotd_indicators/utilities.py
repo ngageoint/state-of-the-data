@@ -1,33 +1,43 @@
-from arcgis.features import FeatureLayer
 from collections import Counter
-from .config import *
 import pandas as pd
 import numpy as np
 import datetime
 import arcpy
 import xlrd
 import ast
-import os
 
 
-def get_pa_score(mean):
-    value = 0
-    if mean > 0:
-        if mean >= 0 and mean < 15:
-            value = 5
-        elif mean >= 15 and mean <= 25:
-            value = 4
-        elif mean > 25 and mean <= 50:
-            value = 3
-        elif mean > 50 and mean <= 100:
-            value = 2
-        else:
-            value = 1
-    elif mean == -1:
-        # no samples
-        value = 0
+# Set Grid
+# form_query_string
+# get_datetime_string
+# get_dates_in_ranges
 
-    return value
+
+def form_query_string(date_list):
+    date_select_field = "MDE"
+    if len(date_list)>1:
+        dates_to_query = str(tuple(date_list))
+    else:
+        dates_to_query = str('('+ str(date_list[0]) + ')')
+    query = date_select_field + ' IN ' + dates_to_query
+    return query
+
+
+def get_datetime_string(s):
+    dts = [dt.strftime('%Y-%m-%d') for dt in s]
+    return dts
+
+
+def get_dates_in_range(look_back_days):
+    num_days = look_back_days
+    today = datetime.datetime.today()
+    date_list = [today - datetime.timedelta(days=x) for x in range(0, num_days)]
+    dates = [d for d in get_datetime_string(date_list)]
+    return dates
+
+
+# Completeness
+# get_cp_score
 
 
 def get_cp_score(ratio, baseVal, inputVal):
@@ -54,6 +64,30 @@ def get_cp_score(ratio, baseVal, inputVal):
     return result
 
 
+# Positional Accuracy
+# get_pa_score
+# get_tier
+
+def get_pa_score(mean):
+    value = 0
+    if mean > 0:
+        if mean >= 0 and mean < 15:
+            value = 5
+        elif mean >= 15 and mean <= 25:
+            value = 4
+        elif mean > 25 and mean <= 50:
+            value = 3
+        elif mean > 50 and mean <= 100:
+            value = 2
+        else:
+            value = 1
+    elif mean == -1:
+        # no samples
+        value = 0
+
+    return value
+
+
 def get_tier(score):
     """
     """
@@ -73,36 +107,33 @@ def get_tier(score):
     return cat
 
 
-def get_grid_sdf():
-
-    dates = get_dates_in_range(look_back_days)
-    where_clause = form_query_string(dates)
-
-    grid_fl = FeatureLayer(url=grid_url)
-    return grid_fl.query(where=where_clause).df
-
-
-def get_datetime_string(s):
-    dts = [dt.strftime('%Y-%m-%d') for dt in s]
-    return dts
+# Logical Consistency
+# get_field_alias
+# get_fc_domains
+# create_attr_dict
+# get_answers
+# most_common_lc_val
+# get_lc_score
 
 
-def get_dates_in_range(look_back_days):
-    num_days = look_back_days #7 by default
-    today = datetime.datetime.today()
-    date_list = [today - datetime.timedelta(days=x) for x in range(0, num_days)]
-    dates = [d for d in get_datetime_string(date_list)]
-    return dates
+def get_field_alias(fc):
+    fields = arcpy.ListFields(fc)
+
+    field_dict = {}
+    for field in fields:
+        field_dict[field.name] = field.aliasName
+
+    return field_dict
 
 
-def form_query_string(date_list):
-    date_select_field = "MDE"
-    if len(date_list)>1:
-        dates_to_query = str(tuple(date_list))
-    else:
-        dates_to_query = str('('+ str(date_list[0]) + ')')
-    query = date_select_field + ' IN ' + dates_to_query
-    return query
+def get_fc_domains(gdb):
+    domains = arcpy.da.ListDomains(gdb)
+    domain_dict = {}
+    for domain in domains:
+        if 'FCODE' in domain.name:
+            domain_dict.update(domain.codedValues)
+
+    return domain_dict
 
 
 def create_attr_dict(filename, check):
@@ -117,62 +148,6 @@ def create_attr_dict(filename, check):
             specificAttributeString += cell.value
     specificAttributeDict = ast.literal_eval(specificAttributeString[:-1] + '}')
     return specificAttributeDict, check
-
-
-def get_fc_domains(gdb):
-    domains = arcpy.da.ListDomains(gdb)
-    domain_dict = {}
-    for domain in domains:
-        if 'FCODE' in domain.name:
-            domain_dict.update(domain.codedValues)
-
-    return domain_dict
-
-
-def get_field_alias(fc):
-    fields = arcpy.ListFields(fc)
-
-    field_dict = {}
-    for field in fields:
-        field_dict[field.name] = field.aliasName
-
-    return field_dict
-
-
-def most_common_lc_val(lst):
-
-    c = Counter(lst)
-    mc = c.most_common(2)
-    prime = mc[0]
-    prime_src = prime[0]
-    prime_count = prime[1]
-    if len(mc) > 1:
-        sec = mc[1]
-        sec_src = sec[0]
-        sec_count = sec[1]
-    else:
-        sec_src = -1
-        sec_count = 0
-
-
-    return prime_src, prime_count, sec_src, sec_count
-
-
-def get_lc_score(val):
-    if val == 0:
-        score = 5
-    elif val == 1:
-        score = 4
-    elif val >= 2 and val <= 3:
-        score = 3
-    elif val >= 4 and val < 6:
-        score = 2
-    elif val >= 6:
-        score = 1
-    else:
-        score = 0
-
-    return score
 
 
 def get_answers(oid, err, attr, feature_count):
@@ -225,33 +200,49 @@ def get_answers(oid, err, attr, feature_count):
             sec_attr_count, lc_score)
 
 
-def get_currency_score(year):
+def most_common_lc_val(lst):
 
-    current_year = datetime.datetime.now()
-
-    if year == non_std_year:
-        score = 6
+    c = Counter(lst)
+    mc = c.most_common(2)
+    prime = mc[0]
+    prime_src = prime[0]
+    prime_count = prime[1]
+    if len(mc) > 1:
+        sec = mc[1]
+        sec_src = sec[0]
+        sec_count = sec[1]
     else:
-        if year >= current_year.year - 2:
-            score = 5
-        elif year >= current_year.year - 4:
-            score = 4
-        elif year >= current_year.year - 9:
-            score = 3
-        elif year >= current_year.year - 14:
-            score = 2
-        else:
-            score = 1
+        sec_src = -1
+        sec_count = 0
+
+
+    return prime_src, prime_count, sec_src, sec_count
+
+
+def get_lc_score(val):
+    if val == 0:
+        score = 5
+    elif val == 1:
+        score = 4
+    elif val >= 2 and val <= 3:
+        score = 3
+    elif val >= 4 and val < 6:
+        score = 2
+    elif val >= 6:
+        score = 1
+    else:
+        score = 0
 
     return score
 
 
-def diff_date(date):
-    """calculates the difference in days from today till the given date"""
-    return float((datetime.datetime.now() - date).days)/365.25
+# Temporal Currency
+# get_datetime
+# diff_date
+# get_currency_score
 
 
-def get_datetime(s):
+def get_datetime(s, nsyr):
     try:
         if s:
             digits = s.split('-')
@@ -260,7 +251,7 @@ def get_datetime(s):
         counter = 0
         if len(digits) == 3:
             if len(digits[0]) == 4:
-                if digits[0]==non_std_year_str:
+                if digits[0]==nsyr:
                     return datetime.datetime(1902,1,1,0,0)
                 else:
                     counter = counter + 1
@@ -288,20 +279,36 @@ def get_datetime(s):
         return date
 
 
-def get_equal_breaks_score(mean):
-    """"""
-    ratio = mean
-    if (ratio >= 0 and ratio <= 0.5):
-        return "G"
-    elif (ratio > 0.5 and ratio <= 1.0):
-        return "R"
-    elif (ratio > 1.0 and ratio <= 1.5):
-        return "L"
-    elif (ratio > 1.5 and ratio <= 2.0):
-        return "S/U"
-    else:
-        return 0
+def diff_date(date):
+    """calculates the difference in days from today till the given date"""
+    return float((datetime.datetime.now() - date).days)/365.25
 
+
+def get_currency_score(year, nsy):
+
+    current_year = datetime.datetime.now()
+
+    if year == nsy:
+        score = 6
+    else:
+        if year >= current_year.year - 2:
+            score = 5
+        elif year >= current_year.year - 4:
+            score = 4
+        elif year >= current_year.year - 9:
+            score = 3
+        elif year >= current_year.year - 14:
+            score = 2
+        else:
+            score = 1
+
+    return score
+
+
+# Thematic Accuracy
+# get_msp
+# get_equal_breaks_score
+# population_scale
 
 def get_msp(scale):
     if scale >= 500000:
@@ -317,88 +324,19 @@ def get_msp(scale):
     return msp
 
 
-def extend_table(table, rows=None):
-    """
-    Adds the required columns to the table and appends new records if
-    given.
-    """
-    if rows is None:
-        rows = []
-    dtypes = np.dtype(
-        [
-            ('_ID', np.int),
-            ('DOM_SCALE', np.float64),
-            ('DOM_COUNT', np.int32),
-            ('DOM_PER', np.float64),
-            ('MIN_SCALE', np.float64),
-            ('MIN_PER', np.float64),
-            ('MAX_SCALE', np.float64),
-            ('MAX_PER', np.float64),
-            ('CNT_2500', np.int32),
-            ('CNT_5000', np.int32),
-            ('CNT_12500', np.int32),
-            ('CNT_25000', np.int32),
-            ('CNT_50000', np.int32),
-            ('CNT_100000', np.int32),
-            ('CNT_250000', np.int32),
-            ('CNT_500000', np.int32),
-            ('CNT_1000000', np.int32),
-            ('PER_2500', np.float64),
-            ('PER_5000', np.float64),
-            ('PER_12500', np.float64),
-            ('PER_25000', np.float64),
-            ('PER_50000', np.float64),
-            ('PER_100000', np.float64),
-            ('PER_250000', np.float64),
-            ('PER_500000', np.float64),
-            ('PER_1000000', np.float64),
-            ('COUNT', np.int32),
-            ('MISSION_PLANNING', '|S1024'),
-            ('POPULATION_SCALE', '|S1024'),
-            ('THEM_ACC_SCORE', np.float64)
-        ]
-    )
-    array = np.array(rows, dtypes)
-    arcpy.da.ExtendTable(table, "OID@", array, "_ID", False)
-    return table
-
-
-def create_grls(grid, population, output_features):
-    """Creates a table to join to the grid dataset"""
-
-    #output_features = os.path.join(env.scratchGDB, "temp_grid")
-    reclass_population = os.path.join(arcpy.env.scratchFolder, "rast_temp.tif")
-    zonal_table = os.path.join(arcpy.env.scratchGDB, 'zonalstats') #in_memory\\table"
-    if arcpy.Exists(reclass_population):
-        arcpy.Delete_management(reclass_population)
-    if arcpy.Exists(zonal_table):
-        arcpy.Delete_management(zonal_table)
-    output_features = arcpy.CopyFeatures_management(grid, output_features)#[0]
-    arcpy.AddMessage(output_features)
-    arcpy.AddMessage(reclass_population)
-    arcpy.AddMessage(zonal_table)
-
-
-    arcpy.gp.Reclassify_sa(population, "VALUE", "0 0;1 2;2 2;3 2;4 2;5 2;6 1;7 1;8 1;9 1;10 1", reclass_population, "DATA")
-    arcpy.gp.ZonalStatisticsAsTable_sa(output_features, "OBJECTID", reclass_population,zonal_table, "DATA", "ALL")
-    #zonal_oid = arcpy.Describe(zonal_table).OIDFieldName
-    arcpy.JoinField_management(output_features, "OBJECTID",
-                               zonal_table, "OBJECTID_1",
-                               "Count;Area;Min;Max;Range;Variety;Majority;Minority;Median;Mean;Std;Sum")
-    arcpy.Delete_management(reclass_population)
-    return output_features
-
-
-def most_common(lst):
-    return max(set(lst), key=lst.count), lst.count(max(set(lst), key=lst.count))
-
-
-def minimun(lst):
-    return min(lst), lst.count(min(lst))
-
-
-def maximum(lst):
-    return max(lst), lst.count(max(lst))
+def get_equal_breaks_score(mean):
+    """"""
+    ratio = mean
+    if (ratio >= 0 and ratio <= 0.5):
+        return "G"
+    elif (ratio > 0.5 and ratio <= 1.0):
+        return "R"
+    elif (ratio > 1.0 and ratio <= 1.5):
+        return "L"
+    elif (ratio > 1.5 and ratio <= 2.0):
+        return "S/U"
+    else:
+        return 0
 
 
 def population_scale(domScale, GRLS):
