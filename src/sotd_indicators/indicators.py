@@ -1,14 +1,23 @@
-from src.sotd_indicators.utils import *
+from src.sotd_indicators.utilities import *
 
+from arcgis.features import SpatialDataFrame, FeatureLayer
 from arcgis.geometry import Geometry, Polyline, filters
-from arcgis.features import SpatialDataFrame
-from arcgis.gis import GIS
 
 import pandas as pd
 import numpy as np
 
 
-def positional_accuracy(gis=GIS()):
+def positional_accuracy(
+        grid_sdf,
+        gis,
+        sp_wkid,
+        sp_rela,
+        feat_url,
+        poac_url,
+        val_field
+):
+
+    print('Running Positional Accuracy')
 
     FIELDS = (
         'MEAN',
@@ -23,23 +32,21 @@ def positional_accuracy(gis=GIS()):
         "TIER"
     )
 
-    grid_sdf = get_grid_sdf()
-
     for idx, row in enumerate(grid_sdf.iterrows()):
 
         geom = Geometry(row[1].SHAPE)
         buff = geom.buffer(1)
 
-        grid_filter = filters._filter(buff, sr, sp_rel)
-        sp_filter   = filters._filter(geom, sr, sp_rel)
+        grid_filter = filters._filter(buff, sp_wkid, sp_rela)
+        sp_filter   = filters._filter(geom, sp_wkid, sp_rela)
 
-        data_fl = FeatureLayer(url=features_url)
+        data_fl = FeatureLayer(url=feat_url)
 
         df_current = data_fl.query(geometry_filter=sp_filter).df
 
         PDVERSION = [int(v) for v in pd.__version__.split('.')]
 
-        out_fl = FeatureLayer(gis=gis, url=positional_acc_url)
+        out_fl = FeatureLayer(gis=gis, url=poac_url)
         out_sdf = out_fl.query(
             geometry_filter=grid_filter,
             return_geometry=True,
@@ -49,21 +56,21 @@ def positional_accuracy(gis=GIS()):
         sq = df_current['SHAPE'].disjoint(geom) == False
         df_current = df_current[sq].copy()
         if len(df_current) > 0:
-            df_notnull = df_current.loc[df_current[value_field].notnull() == True]
+            df_notnull = df_current.loc[df_current[val_field].notnull() == True]
             if PDVERSION[1] <= 16:
-                df_notnull = df_notnull.drop(value_field, axis=1).join(df_notnull[value_field].astype(float,raise_on_error=False)).copy()
+                df_notnull = df_notnull.drop(val_field, axis=1).join(df_notnull[val_field].astype(float,raise_on_error=False)).copy()
             elif PDVERSION[1] > 16:
-                df_notnull = df_notnull.drop(value_field, axis=1).join(df_notnull[value_field].apply(pd.to_numeric, errors='coerce')).copy()  # CHANGES NON NUMERIC ROWS to NaN
-            df_notnull = df_notnull.loc[df_notnull[value_field].notnull() == True].copy() # Drops NaN values
+                df_notnull = df_notnull.drop(val_field, axis=1).join(df_notnull[val_field].apply(pd.to_numeric, errors='coerce')).copy()  # CHANGES NON NUMERIC ROWS to NaN
+            df_notnull = df_notnull.loc[df_notnull[val_field].notnull() == True].copy() # Drops NaN values
             not_null_count = len(df_notnull)
             null_count = len(df_current) - not_null_count
             if PDVERSION[1] == 16:
                 try:
-                    s = df_notnull.loc[df_notnull[value_field] != 'No Information', value_field].copy().astype(np.float64)
+                    s = df_notnull.loc[df_notnull[val_field] != 'No Information', val_field].copy().astype(np.float64)
                 except:
-                    s = df_notnull.loc[df_notnull[value_field].astype(str) != 'No Information', value_field].copy().astype(np.float64)
+                    s = df_notnull.loc[df_notnull[val_field].astype(str) != 'No Information', val_field].copy().astype(np.float64)
             else:
-                s = df_notnull.drop(value_field, axis=1).join(df_notnull[value_field].apply(pd.to_numeric, errors='coerce'))[value_field].copy()  # Drops Text Fields
+                s = df_notnull.drop(val_field, axis=1).join(df_notnull[val_field].apply(pd.to_numeric, errors='coerce'))[val_field].copy()  # Drops Text Fields
             s = s[s.notnull() == True].copy()  # Drops NaN values
             mean = s.mean()
             median = s.median()
@@ -130,7 +137,17 @@ def positional_accuracy(gis=GIS()):
         return out_sdf
 
 
-def completeness(osm_sdf, gis=GIS()):
+def completeness(
+        osm_sdf,
+        grid_sdf,
+        gis,
+        sp_wkid,
+        sp_rela,
+        feat_url,
+        cmpl_url
+):
+
+    print('Running Completeness')
 
     FIELDS = [
         'TDS_DENSITY',
@@ -139,20 +156,18 @@ def completeness(osm_sdf, gis=GIS()):
         'DIFFERENCE'
     ]
 
-    grid_sdf = get_grid_sdf()
-
     for idx, row in enumerate(grid_sdf.iterrows()):
 
         geom = Geometry(row[1].SHAPE)
         buff = geom.buffer(1)
 
-        grid_filter = filters._filter(buff, sr, sp_rel)
-        sp_filter   = filters._filter(geom, sr, sp_rel)
+        grid_filter = filters._filter(buff, sp_wkid, sp_rela)
+        sp_filter   = filters._filter(geom, sp_wkid, sp_rela)
 
-        data_fl = FeatureLayer(url=features_url)
+        data_fl = FeatureLayer(url=feat_url)
         data_sdf = data_fl.query(geometry_filter=sp_filter,return_geometry=True).df
 
-        out_fl = FeatureLayer(gis=gis, url=completeness_url)
+        out_fl = FeatureLayer(gis=gis, url=cmpl_url)
         out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True).df
 
         geometry_type = osm_sdf.geometry_type
@@ -236,29 +251,32 @@ def completeness(osm_sdf, gis=GIS()):
         return out_sdf
 
 
-def logical_consistency(gis=GIS()):
+def logical_consistency(
+        grid_sdf,
+        gis,
+        sp_wkid,
+        sp_rela,
+        feat_url,
+        logc_url,
+        f_att_err_cnt,
+        f_att_err_def,
+        template_fc,
+        template_gdb,
+        attr_check_tab,
+        attr_check_file
+):
 
-    grid_sdf = get_grid_sdf()
-
-    # Moved From Function Signature - Should Not Depend on Static Config
-    templ_fc = template_fc
-    templ_db = template_gdb
-    f_name = attr_check_file
-    t_name = attr_check_tab
-    def_cnt_field = attr_error_field_count
-    def_field = attr_error_field_def
-    input_features = features_url
-    output_features = logical_consistency_url
+    print('Running Logical Consistency')
 
     for idx, row in enumerate(grid_sdf.iterrows()):
 
         geom = Geometry(row[1].SHAPE)
         buff = geom.buffer(1)
 
-        grid_filter = filters._filter(buff, sr, sp_rel)
-        sp_filter = filters._filter(geom, sr, sp_rel)
+        grid_filter = filters._filter(buff, sp_wkid, sp_rela)
+        sp_filter = filters._filter(geom, sp_wkid, sp_rela)
 
-        data_fl = FeatureLayer(url=features_url)
+        data_fl = FeatureLayer(url=feat_url)
         data_sdf = data_fl.query(geometry_filter=sp_filter,return_geometry=True).df
 
         SUM_FIELDS = [
@@ -289,16 +307,15 @@ def logical_consistency(gis=GIS()):
             'SHAPE'
         ]
 
-        default = (-1, -1, -1, -1, -1, -1, -1, 0, 0, 'N/A', 'N/A', 0, 0, 0, 0, 0)
         empty = (-999999, '', None, 'noInformation', 'None', 'Null', 'NULL', -999999.0)
 
         stList = set(data_sdf['F_CODE'].values)
-        fc = input_features
+        fc = feat_url
 
-        alias_table = get_field_alias(templ_fc)
-        fc_domain_dict = get_fc_domains(templ_db)
+        alias_table = get_field_alias(template_fc)
+        fc_domain_dict = get_fc_domains(template_gdb)
 
-        specificAttributeDict, attrCheck = create_attr_dict(f_name, t_name)
+        specificAttributeDict, attrCheck = create_attr_dict(attr_check_file, attr_check_tab)
 
         temp_result_df = pd.DataFrame(columns = FIELDS)#, dtypes=DTYPES)
 
@@ -337,14 +354,14 @@ def logical_consistency(gis=GIS()):
 
         attr_sdf = SpatialDataFrame(temp_result_df, geometry=geoms)
 
-        out_fl = FeatureLayer(gis=gis,url=output_features)
+        out_fl = FeatureLayer(gis=gis,url=logc_url)
         out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True).df
 
         df_current = attr_sdf
         fcount = len(df_current)
 
-        error_field_count = def_cnt_field
-        error_field_def = def_field
+        error_field_count = f_att_err_cnt
+        error_field_def = f_att_err_def
 
         errors = []
         attrs = []
@@ -379,7 +396,18 @@ def logical_consistency(gis=GIS()):
         return out_sdf
 
 
-def temporal_currency(gis=GIS()):
+def temporal_currency(
+        grid_sdf,
+        gis,
+        sp_wkid,
+        sp_rela,
+        feat_url,
+        curr_url,
+        f_currency,
+        non_std_date
+):
+
+    print('Running Temporal Currency')
 
     FIELDS = ['DOM_DATE',
               'DOM_DATE_CNT',
@@ -399,24 +427,18 @@ def temporal_currency(gis=GIS()):
               'FEATURE_CNT',
               'CURRENCY_SCORE']
 
-    grid_sdf = get_grid_sdf()
-
-    # From Config
-    output_features = currency_url
-    in_fields = currency_field
-
     for idx, row in enumerate(grid_sdf.iterrows()):
 
         geom = Geometry(row[1].SHAPE)
         buff = geom.buffer(1)
 
-        grid_filter = filters._filter(buff, sr, sp_rel)
-        sp_filter = filters._filter(geom, sr, sp_rel)
+        grid_filter = filters._filter(buff, sp_wkid, sp_rela)
+        sp_filter = filters._filter(geom, sp_wkid, sp_rela)
 
-        data_fl = FeatureLayer(url=features_url)
+        data_fl = FeatureLayer(url=feat_url)
         df_current = data_fl.query(geometry_filter=sp_filter,return_geometry=True).df
 
-        out_fl = FeatureLayer(gis=gis,url=output_features)
+        out_fl = FeatureLayer(gis=gis,url=curr_url)
         out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,
             return_all_records=True).df
 
@@ -424,10 +446,10 @@ def temporal_currency(gis=GIS()):
         sq = df_current['SHAPE'].disjoint(geom) == False
         df_current = df_current[sq].copy()
         if len(df_current) > 0:
-            dates = df_current[in_fields].tolist()
+            dates = df_current[f_currency].tolist()
             count = len(dates)
             date_list_strings = [d for d in dates]
-            date_list = [get_datetime(d) for d in dates]
+            date_list = [get_datetime(d, non_std_date) for d in dates]
             year_list = [int(x.year) for x in date_list]
             dom_year, dom_year_count = Counter(year_list).most_common()[0]
             dom_date, dom_date_count = Counter(get_datetime_string(date_list)).most_common()[0]
@@ -437,7 +459,7 @@ def temporal_currency(gis=GIS()):
             if len(date_list_minus)>0:
                 if dom_date == '1902-1-1' or dom_date == '1902-01-01':
                     dom_date = non_std_date
-                    dom_year = non_std_year
+                    dom_year = int(non_std_date[0:4])
                     sccore = 6
                     oldest = min(get_datetime_string(date_list_minus))
                     newest = max(get_datetime_string(date_list_minus))
@@ -470,11 +492,11 @@ def temporal_currency(gis=GIS()):
                     count_10year = sum((x <= 10 and x > 5) for x in change_list)
                     count_15year = sum((x <= 15 and x > 10) for x in change_list)
                     count_15year_plus = sum(x >= 15 for x in change_list)
-                    score = get_currency_score(dom_year)
+                    score = get_currency_score(dom_year, int(non_std_date[0:4]))
             else:
                 if dom_date == '1902-01-01':
                     dom_date = non_std_date
-                    dom_year = non_std_year
+                    dom_year = int(non_std_date[0:4])
                     oldest = non_std_date
                     newest = non_std_date
                     change_list = 0
@@ -537,9 +559,18 @@ def temporal_currency(gis=GIS()):
         return out_sdf
 
 
-def thematic_accuracy(gis=GIS()):
+def thematic_accuracy(
+        grid_sdf,
+        gis,
+        sp_wkid,
+        sp_rela,
+        feat_url,
+        them_url,
+        f_thm_acc,
 
-    grid_sdf = get_grid_sdf()
+):
+
+    print('Running Thematic Accuracy')
 
     FIELDS = ['DOM_SCALE',
               'DOM_COUNT',
@@ -571,21 +602,22 @@ def thematic_accuracy(gis=GIS()):
               'POPULATION_SCALE',
               'THEM_ACC_SCORE']
 
-    output_features = thematic_url
-    value_field = thematic_acc_field
+    # Moved From Function Signature
+    # output_features = thematic_url
+    # value_field = thematic_acc_field
 
     for idx, row in enumerate(grid_sdf.iterrows()):
 
         geom = Geometry(row[1].SHAPE)
         buff = geom.buffer(1)
 
-        grid_filter = filters._filter(buff, sr, sp_rel)
-        sp_filter = filters._filter(geom, sr, sp_rel)
+        grid_filter = filters._filter(buff, sp_wkid, sp_rela)
+        sp_filter = filters._filter(geom, sp_wkid, sp_rela)
 
-        data_fl = FeatureLayer(url=features_url)
+        data_fl = FeatureLayer(url=feat_url)
         df_current = data_fl.query(geometry_filter=sp_filter,return_geometry=True).df
 
-        out_fl = FeatureLayer(gis=gis, url=output_features)
+        out_fl = FeatureLayer(gis=gis, url=them_url)
         out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,
             return_all_records=True).df
 
@@ -594,12 +626,12 @@ def thematic_accuracy(gis=GIS()):
 
         if len(df_current) > 0:
             count = len(df_current)
-            max_val = df_current[value_field].max()
-            max_scale = 100 * (len(df_current[df_current[value_field] == max_val])/count)
-            min_val = df_current[value_field].min()
-            min_scale = 100 * (len(df_current[df_current[value_field] == min_val])/count)
-            vc = df_current[value_field].value_counts()
-            common = df_current[value_field].mode() # Used in MSP
+            max_val = df_current[f_thm_acc].max()
+            max_scale = 100 * (len(df_current[df_current[f_thm_acc] == max_val])/count)
+            min_val = df_current[f_thm_acc].min()
+            min_scale = 100 * (len(df_current[df_current[f_thm_acc] == min_val])/count)
+            vc = df_current[f_thm_acc].value_counts()
+            common = df_current[f_thm_acc].mode() # Used in MSP
             if len(common) > 0:
                 common = common[0]
                 common_count = vc[common]
@@ -714,9 +746,19 @@ def thematic_accuracy(gis=GIS()):
         return out_sdf, out_fl
 
 
-def source_lineage(search_val=1001, gis=GIS()):
+def source_lineage(
+        grid_sdf,
+        gis,
+        sp_wkid,
+        sp_rela,
+        feat_url,
+        srln_url,
+        f_value,
+        f_search,
+        search_val
+):
 
-    grid_sdf = get_grid_sdf()
+    print('Running Source Lineage')
 
     FIELDS = ('SOURCE_LIST',
               'PRI_SOURCE',
@@ -726,33 +768,29 @@ def source_lineage(search_val=1001, gis=GIS()):
               'SEC_SOURCE_CNT',
               'SEC_SOURCE_PER')
 
-    output_features = source_lineage_url
-    s_field = search_field
-    v_field = value_field
-
     for idx, row in enumerate(grid_sdf.iterrows()):
 
         geom = Geometry(row[1].SHAPE)
         buff = geom.buffer(1)
 
-        grid_filter = filters._filter(buff, sr, sp_rel)
-        sp_filter = filters._filter(geom, sr, sp_rel)
+        grid_filter = filters._filter(buff, sp_wkid, sp_rela)
+        sp_filter = filters._filter(geom, sp_wkid, sp_rela)
 
-        data_fl = FeatureLayer(url=features_url)
+        data_fl = FeatureLayer(url=feat_url)
         df_current = data_fl.query(geometry_filter=sp_filter,return_geometry=True).df
 
-        out_fl = FeatureLayer(gis=gis,url=output_features)
+        out_fl = FeatureLayer(gis=gis,url=srln_url)
         out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,
             return_all_records=True).df
 
         df_sub = df_current.loc[df_current.disjoint(geom) == False].copy()
 
-        if s_field:
-            df_sub = df_sub.loc[df_sub[s_field] == search_val].copy()
+        if f_search:
+            df_sub = df_sub.loc[df_sub[f_search] == search_val].copy()
 
         df_sub = df_sub.replace({np.nan: "NULL"})
 
-        grp = df_sub.groupby(by=v_field).size() # Get the counts.
+        grp = df_sub.groupby(by=f_value).size() # Get the counts.
         # sort the values to get the biggest on the top
         #pandas 0.18
         try:
@@ -767,7 +805,7 @@ def source_lineage(search_val=1001, gis=GIS()):
 
         if len(grp) > 1:
             grp = grp.head(2)
-            out_sdf[FIELDS[0]][0]=",".join(df_sub[v_field].unique().tolist())
+            out_sdf[FIELDS[0]][0]=",".join(df_sub[f_value].unique().tolist())
             out_sdf[FIELDS[1]][0]=grp.index[0]
             out_sdf[FIELDS[2]][0]=int(grp[0])
             out_sdf[FIELDS[3]][0]=float(grp[0]) * 100.0 / float(len(df_sub))
@@ -785,7 +823,7 @@ def source_lineage(search_val=1001, gis=GIS()):
             out_sdf[FIELDS[6]][0]=float(0)
 
         elif len(grp) == 1:
-            out_sdf[FIELDS[0]][0]=",".join(df_sub[v_field].unique().tolist())
+            out_sdf[FIELDS[0]][0]=",".join(df_sub[f_value].unique().tolist())
             out_sdf[FIELDS[1]][0]=grp.index[0]
             out_sdf[FIELDS[2]][0]=int(grp[0])
             out_sdf[FIELDS[3]][0]=float(grp[0]) * 100.0 / float(len(df_sub))
