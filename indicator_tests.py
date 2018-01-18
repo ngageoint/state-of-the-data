@@ -13,7 +13,13 @@ config_file = r'C:\Users\jeff8977\Desktop\SOTD\src\sotd_indicators\indicator_con
 indicator = Indicator(config_file)
 
 # OSM SDF As Only Input Not Derived From Configuration File
+print("Running Indicators")
+import time
+start = time.time()
 indicator.run_indicators(osm_sdf)
+elapsed = (time.time() - start)
+print(elapsed)
+print("Done Running Indicators")
 
 # Checks
 print('PA SDF: {}'.format(type(indicator.pa_sdf)))

@@ -42,7 +42,7 @@ def positional_accuracy(
 
         data_fl = FeatureLayer(url=feat_url)
 
-        df_current = data_fl.query(geometry_filter=sp_filter).df
+        df_current = data_fl.query(geometry_filter=sp_filter,return_all_records=False).df
 
         PDVERSION = [int(v) for v in pd.__version__.split('.')]
 
@@ -165,7 +165,7 @@ def completeness(
         sp_filter   = filters._filter(geom, sp_wkid, sp_rela)
 
         data_fl = FeatureLayer(url=feat_url)
-        data_sdf = data_fl.query(geometry_filter=sp_filter,return_geometry=True).df
+        data_sdf = data_fl.query(geometry_filter=sp_filter,return_geometry=True,return_all_records=False).df
 
         out_fl = FeatureLayer(gis=gis, url=cmpl_url)
         out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True).df
@@ -277,7 +277,7 @@ def logical_consistency(
         sp_filter = filters._filter(geom, sp_wkid, sp_rela)
 
         data_fl = FeatureLayer(url=feat_url)
-        data_sdf = data_fl.query(geometry_filter=sp_filter,return_geometry=True).df
+        data_sdf = data_fl.query(geometry_filter=sp_filter,return_geometry=True,return_all_records=False).df
 
         SUM_FIELDS = [
             'MEAN_DEF_CNT',
@@ -436,7 +436,7 @@ def temporal_currency(
         sp_filter = filters._filter(geom, sp_wkid, sp_rela)
 
         data_fl = FeatureLayer(url=feat_url)
-        df_current = data_fl.query(geometry_filter=sp_filter,return_geometry=True).df
+        df_current = data_fl.query(geometry_filter=sp_filter,return_geometry=True,return_all_records=False).df
 
         out_fl = FeatureLayer(gis=gis,url=curr_url)
         out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,
@@ -615,7 +615,7 @@ def thematic_accuracy(
         sp_filter = filters._filter(geom, sp_wkid, sp_rela)
 
         data_fl = FeatureLayer(url=feat_url)
-        df_current = data_fl.query(geometry_filter=sp_filter,return_geometry=True).df
+        df_current = data_fl.query(geometry_filter=sp_filter,return_geometry=True,return_all_records=False).df
 
         out_fl = FeatureLayer(gis=gis, url=them_url)
         out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,
@@ -743,7 +743,7 @@ def thematic_accuracy(
         del sq
         del df_current
 
-        return out_sdf, out_fl
+        return out_sdf
 
 
 def source_lineage(
@@ -777,7 +777,7 @@ def source_lineage(
         sp_filter = filters._filter(geom, sp_wkid, sp_rela)
 
         data_fl = FeatureLayer(url=feat_url)
-        df_current = data_fl.query(geometry_filter=sp_filter,return_geometry=True).df
+        df_current = data_fl.query(geometry_filter=sp_filter,return_geometry=True,return_all_records=False).df
 
         out_fl = FeatureLayer(gis=gis,url=srln_url)
         out_sdf = out_fl.query(geometry_filter=grid_filter,return_geometry=True,
