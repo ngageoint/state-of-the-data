@@ -1,6 +1,6 @@
 from src.sotd_indicators.indicators import *
 
-from arcgis.features import FeatureLayer
+from arcgis.features import FeatureLayer, SpatialDataFrame
 from arcgis.gis import GIS
 
 import configparser
@@ -78,6 +78,12 @@ class Indicator:
             self.lb_days
         )
 
+        self.feat_df_list = self.get_update_features(
+            self.grid_sdf,
+            self.feat_url
+        )
+
+
     @staticmethod
     def set_gis(url, username, password):
 
@@ -96,47 +102,113 @@ class Indicator:
     def set_grid(grid_url, lb_days):
 
         dates = get_dates_in_range(lb_days)
-        where_clause = form_query_string(dates)
+        search_field = 'CID'
+        where_clause = search_field + '=' + "'36N122WM'" + " OR " + search_field + '=' + "'36N122WJ'" + " OR "+search_field+'='+"'36N122WI'" + " OR "+search_field+'='+"'36N122WN'" # str(search_val)
+        #where_clause = form_query_string(dates)
 
         grid_fl = FeatureLayer(url=grid_url)
         return grid_fl.query(where=where_clause).df
 
+    #Update features method - May move this
+    def update_features(self, grid_sdf, url):
+        grid_fl = FeatureLayer(gis=self.gis, url=url)
+        out_sdf_as_featureset = grid_sdf.to_featureset()
+        grid_fl.edit_features(updates=out_sdf_as_featureset)
+
+        return grid_fl
+
+    #Get the features that need to be updated
+    def get_update_features(self, grid_sdf, feat_url):
+        df_list = []
+        for idx, row in enumerate(grid_sdf.iterrows()):
+            geom = Geometry(row[1].SHAPE)
+            # buff = geom.buffer(-.1)
+
+            sp_filter = filters._filter(geom, self.sp_wkid, self.sp_rela)
+
+            data_fl = FeatureLayer(gis=self.gis, url=feat_url)
+
+            df_current = data_fl.query(geometry_filter=sp_filter, return_all_records=False).df
+
+            df_list.append(df_current)
+
+        return df_list
+
+
+    #Don't think this is a statis methof
+    def get_update_grids(self, grid_sdf, indicator_url):
+
+        val_list = []
+        FIELDS = []
+
+        for idx, row in enumerate(grid_sdf.iterrows()):
+            geom = Geometry(row[1].SHAPE)
+            buff = geom.buffer(-.1)
+
+            sp_filter = filters._filter(buff, 4326, self.sp_rela)
+
+            data_fl = FeatureLayer(url=indicator_url)
+
+            df_current = data_fl.query(geometry_filter=sp_filter, return_all_records=False).df
+
+            d = df_current.to_dict()
+
+            val_list.append([d[val][0] for val in d.keys()])
+
+            FIELDS = [col for col in d.keys()]
+
+        feat_dict = dict(zip(FIELDS, map(list, zip(*val_list))))
+        out_sdf = SpatialDataFrame(feat_dict)
+        out_sdf.convert_objects(convert_numeric=True)
+
+        return out_sdf
+
     def run_indicators(self, osm_sdf):
 
         try:
-            self.pa_sdf = positional_accuracy(
+            poac_sdf = self.get_update_grids(
                 self.grid_sdf,
-                self.gis,
-                self.sp_wkid,
-                self.sp_rela,
-                self.feat_url,
-                self.poac_url,
+                self.poac_url
+            )
+
+            self.pa_sdf = positional_accuracy(
+                poac_sdf,
+                self.feat_df_list,
                 self.f_value
             )
+
+            self.update_features(self.pa_sdf, self.poac_url)
+
         except Exception as e:
-            print('PA Exception: {}'.format(str(e)))
+           print('PA Exception: {}'.format(str(e)))
 
         try:
-            self.co_sdf = completeness(
-                osm_sdf,
+            cmpl_sdf = self.get_update_grids(
                 self.grid_sdf,
-                self.gis,
-                self.sp_wkid,
-                self.sp_rela,
-                self.feat_url,
                 self.cmpl_url
             )
+
+            self.co_sdf = completeness(
+                cmpl_sdf,
+                self.feat_df_list,
+                osm_sdf
+            )
+
+            self.update_features(self.co_sdf, self.cmpl_url)
+
         except Exception as e:
             print('CO Exception: {}'.format(str(e)))
 
         try:
-            self.lo_sdf = logical_consistency(
+            logc_sdf = self.get_update_grids(
                 self.grid_sdf,
-                self.gis,
-                self.sp_wkid,
-                self.sp_rela,
+                self.logc_url
+            )
+
+            self.lo_sdf = logical_consistency(
+                logc_sdf,
+                self.feat_df_list,
                 self.feat_url,
-                self.logc_url,
                 self.f_att_err_cnt,
                 self.f_att_err_def,
                 self.template_fc,
@@ -144,47 +216,63 @@ class Indicator:
                 self.attr_check_tab,
                 self.attr_check_file
             )
+
+            self.update_features(self.lo_sdf, self.logc_url)
+
         except Exception as e:
             print('LO Exception: {}'.format(str(e)))
 
+
         try:
-            self.te_sdf = temporal_currency(
+            curr_sdf = self.get_update_grids(
                 self.grid_sdf,
-                self.gis,
-                self.sp_wkid,
-                self.sp_rela,
-                self.feat_url,
-                self.curr_url,
+                self.curr_url
+            )
+
+            self.te_sdf = temporal_currency(
+                curr_sdf,
+                self.feat_df_list,
                 self.f_currency,
                 self.non_std_date
             )
+
+            self.update_features(self.te_sdf, self.curr_url)
+
         except Exception as e:
             print('TE Exception: {}'.format(str(e)))
 
         try:
-            self.th_sdf = thematic_accuracy(
+            them_sdf = self.get_update_grids(
                 self.grid_sdf,
-                self.gis,
-                self.sp_wkid,
-                self.sp_rela,
-                self.feat_url,
-                self.them_url,
+                self.them_url
+            )
+
+            self.th_sdf = thematic_accuracy(
+                them_sdf,
+                self.feat_df_list,
                 self.f_thm_acc
             )
+
+            self.update_features(self.th_sdf, self.them_url)
+
         except Exception as e:
             print('TH Exception: {}'.format(str(e)))
 
         try:
-            self.sl_sdf = source_lineage(
+            srln_sdf = self.get_update_grids(
                 self.grid_sdf,
-                self.gis,
-                self.sp_wkid,
-                self.sp_rela,
-                self.feat_url,
-                self.srln_url,
+                self.srln_url
+            )
+
+            self.sl_sdf = source_lineage(
+                srln_sdf,
+                self.feat_df_list,
                 self.f_value,
                 self.f_search,
                 self.search_val
             )
+
+            self.update_features(self.sl_sdf, self.srln_url)
+
         except Exception as e:
             print('SL Exception: {}'.format(str(e)))

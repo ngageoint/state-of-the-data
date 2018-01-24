@@ -121,7 +121,9 @@ def get_field_alias(fc):
 
     field_dict = {}
     for field in fields:
-        field_dict[field.name] = field.aliasName
+        a1 = field.aliasName
+        a2 = a1.replace('<', '(')
+        field_dict[field.name] = a2.replace('>',')')
 
     return field_dict
 
