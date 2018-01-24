@@ -173,8 +173,8 @@ def completeness(
 
         # This Need Work
         if geometry_type == "Polygon":
-            before_val = geoms_before_sdf.geometry.get_area('GEODESIC','SQUAREKILOMETERS').sum()
-            after_val = geoms_after_sdf.geometry.get_area('GEODESIC','SQUAREKILOMETERS').sum()
+            before_val = geoms_before_sdf.geometry.project_as(4326).get_area('GEODESIC','SQUAREKILOMETERS').sum()
+            after_val = geoms_after_sdf.geometry.project_as(4326).get_area('GEODESIC','SQUAREKILOMETERS').sum()
             if after_val > 0:
                 score = get_cp_score(ratio=before_val/after_val,
                         baseVal=before_val,
@@ -188,8 +188,8 @@ def completeness(
             out_sdf.set_value(idx,FIELDS[2],score)
 
         elif geometry_type == "Polyline":
-            before_val = geoms_before_sdf.geometry.get_length('PLANAR','KILOMETERS').sum()
-            after_val = geoms_after_sdf.geometry.get_length('PLANAR','KILOMETERS').sum()
+            before_val = geoms_before_sdf.geometry.project_as(4326).get_length('GEODESIC','KILOMETERS').sum()
+            after_val = geoms_after_sdf.geometry.project_as(4326).get_length('GEODESIC','KILOMETERS').sum()
 
             if after_val > 0:
                 score = get_cp_score(ratio=before_val/after_val,
