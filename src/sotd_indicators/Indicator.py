@@ -118,7 +118,7 @@ class Indicator:
                 if idx == 0:
                     out_sdf = df_current
                 else:
-                    out_sdf.merge(df_current)
+                    out_sdf.merge_datasets(df_current)
 
             self.selected = out_sdf
 
@@ -134,7 +134,7 @@ class Indicator:
         else:
             return res['updateResults']
 
-    def run_poac(self, d1, apply_edits=True):
+    def run_poac(self, p1, apply_edits=True):
 
         try:
             self.set_selected('poac')
@@ -142,7 +142,7 @@ class Indicator:
             df = positional_accuracy(
                 self.selected,
                 self.features,
-                d1
+                p1
             )
 
             if apply_edits:
@@ -172,7 +172,7 @@ class Indicator:
         except Exception as e:
             print('Exception Running Completeness: {}'.format(str(e)))
 
-    def run_curr(self, d1, date='1901-1-1', apply_edits=True):
+    def run_curr(self, p1, date='1901-1-1', apply_edits=True):
 
         try:
             self.set_selected('curr')
@@ -180,7 +180,7 @@ class Indicator:
             df = temporal_currency(
                 self.selected,
                 self.features,
-                d1,
+                p1,
                 date
             )
 
@@ -192,7 +192,7 @@ class Indicator:
         except Exception as e:
             print('Exception Running Temporal Currency: {}'.format(str(e)))
 
-    def run_them(self, d1, apply_edits=True):
+    def run_them(self, p1, apply_edits=True):
 
         try:
             self.set_selected('them')
@@ -200,7 +200,7 @@ class Indicator:
             df = thematic_accuracy(
                 self.selected,
                 self.features,
-                d1
+                p1
             )
 
             if apply_edits:
@@ -211,7 +211,7 @@ class Indicator:
         except Exception as e:
             print('Exception Running Thematic Accuracy: {}'.format(str(e)))
 
-    def run_srln(self, d1, d2, search_value=1001, apply_edits=True):
+    def run_srln(self, p1, p2, search_value=1001, apply_edits=True):
 
         try:
             self.set_selected('srln')
@@ -219,8 +219,8 @@ class Indicator:
             df = source_lineage(
                 self.selected,
                 self.features,
-                d1,
-                d2,
+                p1,
+                p2,
                 search_value
             )
 
@@ -232,7 +232,7 @@ class Indicator:
         except Exception as e:
             print('Exception Running Source Lineage: {}'.format(str(e)))
 
-    def run_logc(self, d1, d2, d3, d4, d5, d6, apply_edits=True):
+    def run_logc(self, p1, p2, p3, p4, apply_edits=True):
 
         try:
             self.set_selected('logc')
@@ -241,12 +241,10 @@ class Indicator:
                 self.selected,
                 self.features,
                 self.feat_url,
-                d1,
-                d2,
-                d3,
-                d4,
-                d5,
-                d6
+                p1,
+                p2,
+                p3,
+                p4
             )
 
             if apply_edits:
