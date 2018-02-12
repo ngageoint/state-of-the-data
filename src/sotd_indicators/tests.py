@@ -52,3 +52,15 @@ class TestIndicators(unittest.TestCase):
 
         self.assertIsInstance(res[0], SpatialDataFrame)
         self.assertEqual(res[1][0]['success'], True)
+
+    def test_logc(self):
+
+        res = self.indicator.run_logc(
+            'DEFICIENCY_CNT',
+            'DEFICIENCY',
+            'HADR',
+            r'C:\Users\jeff8977\Desktop\SOTD\src\sotd_indicators\attributes.json'
+        )
+
+        self.assertIsInstance(res[0], SpatialDataFrame)
+        self.assertEqual(res[1][0]['success'], True)

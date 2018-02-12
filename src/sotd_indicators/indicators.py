@@ -234,8 +234,6 @@ def logical_consistency(
         feat_url,
         f_att_err_cnt,
         f_att_err_def,
-        template_fc,
-        template_gdb,
         attr_check_tab,
         attr_check_file
 ):
@@ -272,12 +270,16 @@ def logical_consistency(
 
     empty = (-999999, '', None, 'noInformation', 'None', 'Null', 'NULL', -999999.0)
 
-    fc = feat_url
+    # TODO - Pass in GIS Object or Valid FeatureLayer
+    domain_dict = {}  # e.g. {'AP030': 'Road', 'AN010': 'Railway'}
+    for t in FeatureLayer(feat_url).properties.types:
+        if 'F_CODE' in t['domains'].keys():
+            for cv in t['domains']['F_CODE']['codedValues']:
+                domain_dict.update({cv['code']: cv['name']})
 
-    #alias_table = get_field_alias(template_fc)
-    fc_domain_dict = get_fc_domains(template_gdb)
-
-    specificAttributeDict, attrCheck = create_attr_dict(attr_check_file, attr_check_tab)
+    attr_dict = json.load(open(attr_check_file))
+    if attr_dict.get(attr_check_tab, None):
+        specificAttributeDict = {k: v for k, v in attr_dict.get(attr_check_tab).items()}
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
@@ -295,10 +297,6 @@ def logical_consistency(
                         i for i in specificAttributeDict[row['F_CODE']]
                         if row[i] in empty
                     ]
-                    #vals = [
-                    #    alias_table[i] for i in specificAttributeDict[row['F_CODE']]
-                    #    if row[i] in empty
-                    #]
 
                     line = row['SHAPE']
                     def_count = len(vals)
@@ -309,16 +307,16 @@ def logical_consistency(
                         oid = row['OBJECTID']
 
                         temp_result_df.set_value(idx_attr, FIELDS[0],fs)
-                        temp_result_df.set_value(idx_attr, FIELDS[1],fc)
-                        temp_result_df.set_value(idx_attr, FIELDS[2],(fc_domain_dict[row['F_CODE']]))
+                        temp_result_df.set_value(idx_attr, FIELDS[1],feat_url)
+                        temp_result_df.set_value(idx_attr, FIELDS[2],(domain_dict[row['F_CODE']]))
                         temp_result_df.set_value(idx_attr, FIELDS[3],round(oid))
                         temp_result_df.set_value(idx_attr, FIELDS[4],len(vals))
 
 
                     else:
                         temp_result_df.set_value(idx_attr, FIELDS[0],'N/A')
-                        temp_result_df.set_value(idx_attr, FIELDS[1],fc)
-                        temp_result_df.set_value(idx_attr, FIELDS[2],(fc_domain_dict[row['F_CODE']]))
+                        temp_result_df.set_value(idx_attr, FIELDS[1],feat_url)
+                        temp_result_df.set_value(idx_attr, FIELDS[2],(domain_dict[row['F_CODE']]))
                         temp_result_df.set_value(idx_attr, FIELDS[3],round(oid))
                         temp_result_df.set_value(idx_attr, FIELDS[4],len(vals))
 

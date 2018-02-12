@@ -3,8 +3,7 @@ import pandas as pd
 import numpy as np
 import datetime
 import arcpy
-import xlrd
-import ast
+import json
 
 
 # Set Grid
@@ -126,30 +125,6 @@ def get_field_alias(fc):
         field_dict[field.name] = a2.replace('>',')')
 
     return field_dict
-
-
-def get_fc_domains(gdb):
-    domains = arcpy.da.ListDomains(gdb)
-    domain_dict = {}
-    for domain in domains:
-        if 'FCODE' in domain.name:
-            domain_dict.update(domain.codedValues)
-
-    return domain_dict
-
-
-def create_attr_dict(filename, check):
-    """Creates and attribute dictionary"""
-    xl_workbook = xlrd.open_workbook(filename)
-    specificAttributeString = '{'
-    specificAttributeDict = {}
-    xl_sheet = xl_workbook.sheet_by_name(check)
-    for row in range(xl_sheet.nrows):
-        if row>0:
-            cell = xl_sheet.cell(row,8)
-            specificAttributeString += cell.value
-    specificAttributeDict = ast.literal_eval(specificAttributeString[:-1] + '}')
-    return specificAttributeDict, check
 
 
 def get_answers(oid, err, attr, feature_count):
