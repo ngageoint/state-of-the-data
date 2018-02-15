@@ -1,9 +1,11 @@
+from src.sotd_indicators.field_schema import *
+
+
 from collections import Counter
 import pandas as pd
 import numpy as np
 import datetime
 import arcpy
-import json
 
 
 # Set Grid

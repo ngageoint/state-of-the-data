@@ -1,3 +1,5 @@
+src/sotd_indicators/attributes.json
+src/sotd_indicators/field_schema.py
 *.pyc
 *config.py
 .idea/

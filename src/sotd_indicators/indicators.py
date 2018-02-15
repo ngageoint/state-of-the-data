@@ -1,31 +1,17 @@
 from src.sotd_indicators.utilities import *
 
+
 from arcgis.features import SpatialDataFrame, FeatureLayer
 from arcgis.geometry import Geometry, Polyline, filters
 
 import pandas as pd
 import numpy as np
+import json
 
 
-def positional_accuracy(
-        out_sdf,
-        df_list,
-        val_field
-):
+def positional_accuracy(out_sdf, df_list, val_field):
 
     print('Running Positional Accuracy')
-
-    FIELDS = ('MEAN',
-        'MEDIAN',
-        'MODE',
-        'MIN_',
-        'MAX_',
-        'NO_DATE_CNT',
-        'NO_DATE_PCT',
-        'FEATURE_CNT',
-        'PA_SCORE',
-        "TIER"
-    )
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
@@ -72,34 +58,34 @@ def positional_accuracy(
             null_percent = float(null_count) * 100.0 / float(len(df_current))
 
             if not pd.isnull(mean):
-                out_sdf.set_value(idx, FIELDS[0],round(mean,1))
+                out_sdf.set_value(idx, field_schema.get('poac')[0],round(mean,1))
             else:
-                out_sdf.set_value(idx, FIELDS[0],-1)
+                out_sdf.set_value(idx, field_schema.get('poac')[0],-1)
             if not pd.isnull(median):
-                out_sdf.set_value(idx, FIELDS[1],median)
+                out_sdf.set_value(idx, field_schema.get('poac')[1],median)
             else:
-                out_sdf.set_value(idx, FIELDS[1],-1)
+                out_sdf.set_value(idx, field_schema.get('poac')[1],-1)
 
             if not pd.isnull(mode):
-                out_sdf.set_value(idx, FIELDS[2],mode)
+                out_sdf.set_value(idx, field_schema.get('poac')[2],mode)
             else:
-                out_sdf.set_value(idx, FIELDS[2],-1)
+                out_sdf.set_value(idx, field_schema.get('poac')[2],-1)
 
             if not pd.isnull(mmin):
-                out_sdf.set_value(idx, FIELDS[3],mmin)
+                out_sdf.set_value(idx, field_schema.get('poac')[3],mmin)
             else:
-                out_sdf.set_value(idx, FIELDS[3],-1)
+                out_sdf.set_value(idx, field_schema.get('poac')[3],-1)
 
             if not pd.isnull(mmax):
-                out_sdf.set_value(idx, FIELDS[4],mmax)
+                out_sdf.set_value(idx, field_schema.get('poac')[4],mmax)
             else:
-                out_sdf.set_value(idx, FIELDS[4],-1)
+                out_sdf.set_value(idx, field_schema.get('poac')[4],-1)
 
-            out_sdf.set_value(idx, FIELDS[5],null_count)
-            out_sdf.set_value(idx, FIELDS[6],round(null_percent,1))
-            out_sdf.set_value(idx, FIELDS[7],len(df_current))#not_null_count
-            out_sdf.set_value(idx, FIELDS[8],score)
-            out_sdf.set_value(idx, FIELDS[9],get_tier(score))
+            out_sdf.set_value(idx, field_schema.get('poac')[5],null_count)
+            out_sdf.set_value(idx, field_schema.get('poac')[6],round(null_percent,1))
+            out_sdf.set_value(idx, field_schema.get('poac')[7],len(df_current))#not_null_count
+            out_sdf.set_value(idx, field_schema.get('poac')[8],score)
+            out_sdf.set_value(idx, field_schema.get('poac')[9],get_tier(score))
 
             del df_notnull
             del mean
@@ -111,39 +97,27 @@ def positional_accuracy(
             del null_percent
 
         else:
-            out_sdf.set_value(idx, FIELDS[0], -1)
-            out_sdf.set_value(idx, FIELDS[1], -1)
-            out_sdf.set_value(idx, FIELDS[2],-1)
-            out_sdf.set_value(idx, FIELDS[3],-1)
-            out_sdf.set_value(idx, FIELDS[4], -1)
-            out_sdf.set_value(idx, FIELDS[5], 0)
-            out_sdf.set_value(idx, FIELDS[6], 0)
-            out_sdf.set_value(idx, FIELDS[7], 0)
-            out_sdf.set_value(idx, FIELDS[8], 0)
-            out_sdf.set_value(idx, FIELDS[9], "No Ranking")
+            out_sdf.set_value(idx, field_schema.get('poac')[0], -1)
+            out_sdf.set_value(idx, field_schema.get('poac')[1], -1)
+            out_sdf.set_value(idx, field_schema.get('poac')[2],-1)
+            out_sdf.set_value(idx, field_schema.get('poac')[3],-1)
+            out_sdf.set_value(idx, field_schema.get('poac')[4], -1)
+            out_sdf.set_value(idx, field_schema.get('poac')[5], 0)
+            out_sdf.set_value(idx, field_schema.get('poac')[6], 0)
+            out_sdf.set_value(idx, field_schema.get('poac')[7], 0)
+            out_sdf.set_value(idx, field_schema.get('poac')[8], 0)
+            out_sdf.set_value(idx, field_schema.get('poac')[9], "No Ranking")
 
     return out_sdf
 
 
-def completeness(
-        out_sdf,
-        df_list,
-        osm_sdf
-):
+def completeness(out_sdf, df_list, osm_sdf):
 
     print('Running Completeness')
-
-    FIELDS = [
-        'TDS_DENSITY',
-        'COMP_DENSITY',
-        'COMPLETENESS_VALUE',
-        'DIFFERENCE'
-    ]
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
         geom = Geometry(row[1].SHAPE)
-        #buff = geom.buffer(1)
 
         data_sdf = df_list[idx]
 
@@ -182,10 +156,10 @@ def completeness(
             else:
                 score = get_cp_score(0, before_val, after_val)
 
-            out_sdf.set_value(idx,FIELDS[0],round(before_val,1))
-            out_sdf.set_value(idx,FIELDS[1],round(after_val,1))
-            out_sdf.set_value(idx,FIELDS[3],round(before_val - after_val,1))
-            out_sdf.set_value(idx,FIELDS[2],score)
+            out_sdf.set_value(idx,field_schema.get('cmpl')[0],round(before_val,1))
+            out_sdf.set_value(idx,field_schema.get('cmpl')[1],round(after_val,1))
+            out_sdf.set_value(idx,field_schema.get('cmpl')[3],round(before_val - after_val,1))
+            out_sdf.set_value(idx,field_schema.get('cmpl')[2],score)
 
         elif geometry_type == "Polyline":
             before_val = geoms_before_sdf.geometry.project_as(4326).get_length('GEODESIC','KILOMETERS').sum()
@@ -198,10 +172,10 @@ def completeness(
             else:
                 score = get_cp_score(0, before_val, after_val)
 
-            out_sdf.set_value(idx,FIELDS[0],round(before_val,1))
-            out_sdf.set_value(idx,FIELDS[1],round(after_val,1))
-            out_sdf.set_value(idx,FIELDS[3],round(before_val - after_val,1))
-            out_sdf.set_value(idx,FIELDS[2],score)
+            out_sdf.set_value(idx,field_schema.get('cmpl')[0],round(before_val,1))
+            out_sdf.set_value(idx,field_schema.get('cmpl')[1],round(after_val,1))
+            out_sdf.set_value(idx,field_schema.get('cmpl')[3],round(before_val - after_val,1))
+            out_sdf.set_value(idx,field_schema.get('cmpl')[2],score)
 
         else:
             before_count = len(geoms_before_sdf)
@@ -215,10 +189,10 @@ def completeness(
                         baseVal=before_count,
                         inputVal=after_count)
 
-            out_sdf.set_value(idx,FIELDS[0], before_count)
-            out_sdf.set_value(idx,FIELDS[1], after_count)
-            out_sdf.set_value(idx,FIELDS[3], before_count - after_count)
-            out_sdf.set_value(idx,FIELDS[2], score)
+            out_sdf.set_value(idx,field_schema.get('cmpl')[0], before_count)
+            out_sdf.set_value(idx,field_schema.get('cmpl')[1], after_count)
+            out_sdf.set_value(idx,field_schema.get('cmpl')[3], before_count - after_count)
+            out_sdf.set_value(idx,field_schema.get('cmpl')[2], score)
 
         del sq
         del df_after
@@ -228,45 +202,18 @@ def completeness(
     return out_sdf
 
 
-def logical_consistency(
-        out_sdf,
-        df_list,
-        feat_url,
-        f_att_err_cnt,
-        f_att_err_def,
-        attr_check_tab,
-        attr_check_file
-):
+def logical_consistency(out_sdf, df_list, feat_url, err_cnt, err_def, attr_key, attr_file):
 
     print('Running Logical Consistency')
 
-    SUM_FIELDS = [
-        'MEAN_DEF_CNT',
-        'MEDIAN_DEF_CNT',
-        'MIN_DEF_CNT',
-        'MAX_DEF_CNT',
-        'PRI_NUM_DEF',
-        'SEC_NUM_DEF',
-        'PER_PRI',
-        'PER_SEC',
-        'PRI_ATTR_DEF',
-        'SEC_ATTR_DEF',
-        'PRI_ATTR_DEF_PER',
-        'SEC_ATTR_DEF_PER',
-        'FEATURE_CNT',
-        'PRI_ATTR_DEF_CNT',
-        'SEC_ATTR_DEF_CNT',
-        'LC_SCORE'
-    ]
-
-    FIELDS = [
+    TMP_FIELDS = (
         'DEFICIENCY',
         'FEATURE_CLASS',
         'SUBTYPE',
         'ORIG_OID',
         'DEFICIENCY_CNT',
         'SHAPE'
-    ]
+    )
 
     empty = (-999999, '', None, 'noInformation', 'None', 'Null', 'NULL', -999999.0)
 
@@ -277,9 +224,9 @@ def logical_consistency(
             for cv in t['domains']['F_CODE']['codedValues']:
                 domain_dict.update({cv['code']: cv['name']})
 
-    attr_dict = json.load(open(attr_check_file))
-    if attr_dict.get(attr_check_tab, None):
-        specificAttributeDict = {k: v for k, v in attr_dict.get(attr_check_tab).items()}
+    attr_dict = json.load(open(attr_file))
+    if attr_dict.get(attr_key, None):
+        specificAttributeDict = {k: v for k, v in attr_dict.get(attr_key).items()}
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
@@ -287,7 +234,7 @@ def logical_consistency(
 
         stList = set(data_sdf['F_CODE'].values)
 
-        temp_result_df = pd.DataFrame(columns = FIELDS)#, dtypes=DTYPES)
+        temp_result_df = pd.DataFrame(columns = TMP_FIELDS)#, dtypes=DTYPES)
 
         geoms=[]
         for idx_attr, row in data_sdf.iterrows():
@@ -306,27 +253,27 @@ def logical_consistency(
                         fs = ",".join(vals)
                         oid = row['OBJECTID']
 
-                        temp_result_df.set_value(idx_attr, FIELDS[0],fs)
-                        temp_result_df.set_value(idx_attr, FIELDS[1],feat_url)
-                        temp_result_df.set_value(idx_attr, FIELDS[2],(domain_dict[row['F_CODE']]))
-                        temp_result_df.set_value(idx_attr, FIELDS[3],round(oid))
-                        temp_result_df.set_value(idx_attr, FIELDS[4],len(vals))
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[0],fs)
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[1],feat_url)
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[2],(domain_dict[row['F_CODE']]))
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[3],round(oid))
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[4],len(vals))
 
 
                     else:
-                        temp_result_df.set_value(idx_attr, FIELDS[0],'N/A')
-                        temp_result_df.set_value(idx_attr, FIELDS[1],feat_url)
-                        temp_result_df.set_value(idx_attr, FIELDS[2],(domain_dict[row['F_CODE']]))
-                        temp_result_df.set_value(idx_attr, FIELDS[3],round(oid))
-                        temp_result_df.set_value(idx_attr, FIELDS[4],len(vals))
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[0],'N/A')
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[1],feat_url)
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[2],(domain_dict[row['F_CODE']]))
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[3],round(oid))
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[4],len(vals))
 
         attr_sdf = temp_result_df#SpatialDataFrame(temp_result_df, geometry=geoms)
 
         df_current = attr_sdf
         fcount = len(df_current)
 
-        error_field_count = f_att_err_cnt
-        error_field_def = f_att_err_def
+        error_field_count = err_cnt
+        error_field_def = err_def
 
         errors = []
         attrs = []
@@ -340,52 +287,29 @@ def logical_consistency(
 
         results = get_answers(0,errors,attrs, fcount)
 
-        out_sdf.set_value(idx, SUM_FIELDS[0], results[1])
-        out_sdf.set_value(idx, SUM_FIELDS[1], results[2])
-        out_sdf.set_value(idx, SUM_FIELDS[2], results[3])
-        out_sdf.set_value(idx, SUM_FIELDS[3], results[4])
-        out_sdf.set_value(idx, SUM_FIELDS[4], results[5])
-        out_sdf.set_value(idx, SUM_FIELDS[5], results[6])
-        out_sdf.set_value(idx, SUM_FIELDS[6], results[7])
-        out_sdf.set_value(idx, SUM_FIELDS[7], results[8])
-        out_sdf.set_value(idx, SUM_FIELDS[8], results[9])
-        out_sdf.set_value(idx, SUM_FIELDS[9], results[10])
-        out_sdf.set_value(idx, SUM_FIELDS[10], results[11])
-        out_sdf.set_value(idx, SUM_FIELDS[11], results[12])
-        out_sdf.set_value(idx, SUM_FIELDS[12], results[13])
-        out_sdf.set_value(idx, SUM_FIELDS[13], results[14])
-        out_sdf.set_value(idx, SUM_FIELDS[14], results[15])
-        out_sdf.set_value(idx, SUM_FIELDS[15], results[16])
+        out_sdf.set_value(idx, field_schema.get('logc')[0], results[1])
+        out_sdf.set_value(idx, field_schema.get('logc')[1], results[2])
+        out_sdf.set_value(idx, field_schema.get('logc')[2], results[3])
+        out_sdf.set_value(idx, field_schema.get('logc')[3], results[4])
+        out_sdf.set_value(idx, field_schema.get('logc')[4], results[5])
+        out_sdf.set_value(idx, field_schema.get('logc')[5], results[6])
+        out_sdf.set_value(idx, field_schema.get('logc')[6], results[7])
+        out_sdf.set_value(idx, field_schema.get('logc')[7], results[8])
+        out_sdf.set_value(idx, field_schema.get('logc')[8], results[9])
+        out_sdf.set_value(idx, field_schema.get('logc')[9], results[10])
+        out_sdf.set_value(idx, field_schema.get('logc')[10], results[11])
+        out_sdf.set_value(idx, field_schema.get('logc')[11], results[12])
+        out_sdf.set_value(idx, field_schema.get('logc')[12], results[13])
+        out_sdf.set_value(idx, field_schema.get('logc')[13], results[14])
+        out_sdf.set_value(idx, field_schema.get('logc')[14], results[15])
+        out_sdf.set_value(idx, field_schema.get('logc')[15], results[16])
 
     return out_sdf
 
 
-def temporal_currency(
-        out_sdf,
-        df_list,
-        f_currency,
-        non_std_date
-):
+def temporal_currency(out_sdf, df_list, f_currency, non_std_date):
 
     print('Running Temporal Currency')
-
-    FIELDS = ['DOM_DATE',
-              'DOM_DATE_CNT',
-              'DOM_DATE_PER',
-              'DOM_YEAR',
-              'DOM_YEAR_CNT',
-              'DOM_YEAR_PER',
-              'OLDEST_DATE',
-              'NEWEST_DATE',
-              'NO_DATE_CNT',
-              'NO_DATE_PER',
-              'PCT_2_YEAR',
-              'PCT_5_YEAR',
-              'PCT_10_YEAR',
-              'PCT_15_YEAR',
-              'PCT_15_PLUS_YEAR',
-              'FEATURE_CNT',
-              'CURRENCY_SCORE']
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
@@ -468,87 +392,49 @@ def temporal_currency(
                     count_15year_plus = 0
                     score = 6
 
-            out_sdf.set_value(idx, FIELDS[0],dom_date)
-            out_sdf.set_value(idx, FIELDS[1],dom_date_count)
-            out_sdf.set_value(idx, FIELDS[2],round(dom_date_count * 100.0 / count,1))
-            out_sdf.set_value(idx, FIELDS[3],dom_year)
-            out_sdf.set_value(idx, FIELDS[4],dom_year_count)
-            out_sdf.set_value(idx, FIELDS[5],round(dom_year_count * 100.0 / count,1))
-            out_sdf.set_value(idx, FIELDS[6],oldest)
-            out_sdf.set_value(idx, FIELDS[7],newest)
-            out_sdf.set_value(idx, FIELDS[8],count_non_std_dates)
-            out_sdf.set_value(idx, FIELDS[9],round(float(count_non_std_dates) * 100.0 / count,1))
-            out_sdf.set_value(idx, FIELDS[10],round(float(count_2year) * 100.0 / count,1))
-            out_sdf.set_value(idx, FIELDS[11],round(float(count_5year) * 100.0 / count,1))
-            out_sdf.set_value(idx, FIELDS[12],round(float(count_10year) * 100.0 / count,1))
-            out_sdf.set_value(idx, FIELDS[13],round(float(count_15year) * 100.0 / count,1))
-            out_sdf.set_value(idx, FIELDS[14],round(float(count_15year_plus) * 100.0 / count,1))
-            out_sdf.set_value(idx, FIELDS[15],int(count))
-            out_sdf.set_value(idx, FIELDS[16],int(score))
+            out_sdf.set_value(idx, field_schema.get('curr')[0],dom_date)
+            out_sdf.set_value(idx, field_schema.get('curr')[1],dom_date_count)
+            out_sdf.set_value(idx, field_schema.get('curr')[2],round(dom_date_count * 100.0 / count,1))
+            out_sdf.set_value(idx, field_schema.get('curr')[3],dom_year)
+            out_sdf.set_value(idx, field_schema.get('curr')[4],dom_year_count)
+            out_sdf.set_value(idx, field_schema.get('curr')[5],round(dom_year_count * 100.0 / count,1))
+            out_sdf.set_value(idx, field_schema.get('curr')[6],oldest)
+            out_sdf.set_value(idx, field_schema.get('curr')[7],newest)
+            out_sdf.set_value(idx, field_schema.get('curr')[8],count_non_std_dates)
+            out_sdf.set_value(idx, field_schema.get('curr')[9],round(float(count_non_std_dates) * 100.0 / count,1))
+            out_sdf.set_value(idx, field_schema.get('curr')[10],round(float(count_2year) * 100.0 / count,1))
+            out_sdf.set_value(idx, field_schema.get('curr')[11],round(float(count_5year) * 100.0 / count,1))
+            out_sdf.set_value(idx, field_schema.get('curr')[12],round(float(count_10year) * 100.0 / count,1))
+            out_sdf.set_value(idx, field_schema.get('curr')[13],round(float(count_15year) * 100.0 / count,1))
+            out_sdf.set_value(idx, field_schema.get('curr')[14],round(float(count_15year_plus) * 100.0 / count,1))
+            out_sdf.set_value(idx, field_schema.get('curr')[15],int(count))
+            out_sdf.set_value(idx, field_schema.get('curr')[16],int(score))
 
         else:
-            out_sdf.set_value(idx, FIELDS[0],"None")
-            out_sdf.set_value(idx, FIELDS[1],0)
-            out_sdf.set_value(idx, FIELDS[2],0)
-            out_sdf.set_value(idx, FIELDS[3],0)
-            out_sdf.set_value(idx, FIELDS[4],0)
-            out_sdf.set_value(idx, FIELDS[5],0)
-            out_sdf.set_value(idx, FIELDS[6],"None")
-            out_sdf.set_value(idx, FIELDS[7],"None")
-            out_sdf.set_value(idx, FIELDS[8],0)
-            out_sdf.set_value(idx, FIELDS[9],0)
-            out_sdf.set_value(idx, FIELDS[10],0)
-            out_sdf.set_value(idx, FIELDS[11],0)
-            out_sdf.set_value(idx, FIELDS[12],0)
-            out_sdf.set_value(idx, FIELDS[13],0)
-            out_sdf.set_value(idx, FIELDS[14],0)
-            out_sdf.set_value(idx, FIELDS[15],0)
-            out_sdf.set_value(idx, FIELDS[16],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[0],"None")
+            out_sdf.set_value(idx, field_schema.get('curr')[1],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[2],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[3],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[4],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[5],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[6],"None")
+            out_sdf.set_value(idx, field_schema.get('curr')[7],"None")
+            out_sdf.set_value(idx, field_schema.get('curr')[8],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[9],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[10],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[11],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[12],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[13],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[14],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[15],0)
+            out_sdf.set_value(idx, field_schema.get('curr')[16],0)
 
     return out_sdf
 
 
-def thematic_accuracy(
-        out_sdf,
-        df_list,
-        f_thm_acc
-):
+def thematic_accuracy(out_sdf, df_list, f_thm_acc):
 
     print('Running Thematic Accuracy')
-
-    FIELDS = ['DOM_SCALE',
-              'DOM_COUNT',
-              'DOM_PER',
-              'MIN_SCALE',
-              'MIN_PER',
-              'MAX_SCALE',
-              'MAX_PER',
-              'CNT_2500',
-              'CNT_5000',
-              'CNT_12500',
-              'CNT_25000',
-              'CNT_50000',
-              'CNT_100000',
-              'CNT_250000',
-              'CNT_500000',
-              'CNT_1000000',
-              'PER_2500',
-              'PER_5000',
-              'PER_12500',
-              'PER_25000',
-              'PER_50000',
-              'PER_100000',
-              'PER_250000',
-              'PER_500000',
-              'PER_1000000',
-              'COUNT_',  # Add Underscore if AGOL
-              'MISSION_PLANNING',
-              'POPULATION_SCALE',
-              'THEM_ACC_SCORE']
-
-    # Moved From Function Signature
-    # output_features = thematic_url
-    # value_field = thematic_acc_field
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
@@ -610,69 +496,53 @@ def thematic_accuracy(
             #df_current['EQUAL'] = SCORE_VALUE # ASSIGNS EQUAL TO LANSCAN_SCALE
             #29 field
 
-            out_sdf.set_value(idx, FIELDS[0],common)# median
-            out_sdf.set_value(idx, FIELDS[1],common_count) # % common
-            out_sdf.set_value(idx, FIELDS[2],round(common_per,1))
-            out_sdf.set_value(idx, FIELDS[3],min_val)
-            out_sdf.set_value(idx, FIELDS[4],round(min_scale,1))
-            out_sdf.set_value(idx, FIELDS[5],max_val)
-            out_sdf.set_value(idx, FIELDS[6],round(max_scale,1))
-            out_sdf.set_value(idx, FIELDS[7],count_2500)
-            out_sdf.set_value(idx, FIELDS[8],count_5000)
-            out_sdf.set_value(idx, FIELDS[9],count_12500)
-            out_sdf.set_value(idx, FIELDS[10],count_25000)
-            out_sdf.set_value(idx, FIELDS[11],count_50000)
-            out_sdf.set_value(idx, FIELDS[12],count_100000)
-            out_sdf.set_value(idx, FIELDS[13],count_250000)
-            out_sdf.set_value(idx, FIELDS[14],count_500000)
-            out_sdf.set_value(idx, FIELDS[15],count_1000000)
-            out_sdf.set_value(idx, FIELDS[16],round(count_2500*100/count,1))
-            out_sdf.set_value(idx, FIELDS[17],round(count_5000*100/count,1))
-            out_sdf.set_value(idx, FIELDS[18],round(count_12500*100/count,1))
-            out_sdf.set_value(idx, FIELDS[19],round(count_25000*100/count,1))
-            out_sdf.set_value(idx, FIELDS[20],round(count_50000*100/count,1))
-            out_sdf.set_value(idx, FIELDS[21],round(count_100000*100/count,1))
-            out_sdf.set_value(idx, FIELDS[22],round(count_250000*100/count,1))
-            out_sdf.set_value(idx, FIELDS[23],round(count_500000*100/count,1))
-            out_sdf.set_value(idx, FIELDS[24],round(count_1000000*100/count,1))
-            out_sdf.set_value(idx, FIELDS[25],count)
-            out_sdf.set_value(idx, FIELDS[26],str(MSP)) #MISSION_PLANNING FIELD
-            out_sdf.set_value(idx, FIELDS[27],SCORE_VALUE)#), # THEMATIC SCALE VALUE
-            out_sdf.set_value(idx, FIELDS[28],population_scale(common, SCORE_VALUE)) # POPULATION_SCALE
+            out_sdf.set_value(idx, field_schema.get('them')[0],common)# median
+            out_sdf.set_value(idx, field_schema.get('them')[1],common_count) # % common
+            out_sdf.set_value(idx, field_schema.get('them')[2],round(common_per,1))
+            out_sdf.set_value(idx, field_schema.get('them')[3],min_val)
+            out_sdf.set_value(idx, field_schema.get('them')[4],round(min_scale,1))
+            out_sdf.set_value(idx, field_schema.get('them')[5],max_val)
+            out_sdf.set_value(idx, field_schema.get('them')[6],round(max_scale,1))
+            out_sdf.set_value(idx, field_schema.get('them')[7],count_2500)
+            out_sdf.set_value(idx, field_schema.get('them')[8],count_5000)
+            out_sdf.set_value(idx, field_schema.get('them')[9],count_12500)
+            out_sdf.set_value(idx, field_schema.get('them')[10],count_25000)
+            out_sdf.set_value(idx, field_schema.get('them')[11],count_50000)
+            out_sdf.set_value(idx, field_schema.get('them')[12],count_100000)
+            out_sdf.set_value(idx, field_schema.get('them')[13],count_250000)
+            out_sdf.set_value(idx, field_schema.get('them')[14],count_500000)
+            out_sdf.set_value(idx, field_schema.get('them')[15],count_1000000)
+            out_sdf.set_value(idx, field_schema.get('them')[16],round(count_2500*100/count,1))
+            out_sdf.set_value(idx, field_schema.get('them')[17],round(count_5000*100/count,1))
+            out_sdf.set_value(idx, field_schema.get('them')[18],round(count_12500*100/count,1))
+            out_sdf.set_value(idx, field_schema.get('them')[19],round(count_25000*100/count,1))
+            out_sdf.set_value(idx, field_schema.get('them')[20],round(count_50000*100/count,1))
+            out_sdf.set_value(idx, field_schema.get('them')[21],round(count_100000*100/count,1))
+            out_sdf.set_value(idx, field_schema.get('them')[22],round(count_250000*100/count,1))
+            out_sdf.set_value(idx, field_schema.get('them')[23],round(count_500000*100/count,1))
+            out_sdf.set_value(idx, field_schema.get('them')[24],round(count_1000000*100/count,1))
+            out_sdf.set_value(idx, field_schema.get('them')[25],count)
+            out_sdf.set_value(idx, field_schema.get('them')[26],str(MSP)) #MISSION_PLANNING FIELD
+            out_sdf.set_value(idx, field_schema.get('them')[27],SCORE_VALUE)#), # THEMATIC SCALE VALUE
+            out_sdf.set_value(idx, field_schema.get('them')[28],population_scale(common, SCORE_VALUE)) # POPULATION_SCALE
             #to 28
 
         else:
             for i in range(0,25):
-                out_sdf.set_value(idx, FIELDS[i],-1)
-            out_sdf.set_value(idx, FIELDS[25],0)
-            out_sdf.set_value(idx, FIELDS[26],'N/A')
-            out_sdf.set_value(idx, FIELDS[27],'N/A')
-            out_sdf.set_value(idx, FIELDS[28],0)
+                out_sdf.set_value(idx, field_schema.get('them')[i],-1)
+            out_sdf.set_value(idx, field_schema.get('them')[25],0)
+            out_sdf.set_value(idx, field_schema.get('them')[26],'N/A')
+            out_sdf.set_value(idx, field_schema.get('them')[27],'N/A')
+            out_sdf.set_value(idx, field_schema.get('them')[28],0)
 
-        #del geom
-        #del sq
         del df_current
 
     return out_sdf
 
 
-def source_lineage(
-        out_sdf,
-        df_list,
-        f_value,
-        f_search,
-        search_val
-):
+def source_lineage(out_sdf, df_list, f_value, f_search, search_val):
 
     print('Running Source Lineage')
-
-    FIELDS = ('SOURCE_LIST',
-              'PRI_SOURCE',
-              'PRI_SOURCE_CNT',
-              'PRI_SOURCE_PER',
-              'SEC_SOURCE',
-              'SEC_SOURCE_CNT',
-              'SEC_SOURCE_PER')
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
@@ -700,30 +570,30 @@ def source_lineage(
 
         if len(grp) > 1:
             grp = grp.head(2)
-            out_sdf.set_value(idx, FIELDS[0],",".join(df_sub[f_value].unique().tolist()))
-            out_sdf.set_value(idx, FIELDS[1],grp.index[0])
-            out_sdf.set_value(idx, FIELDS[2],int(grp[0]))
-            out_sdf.set_value(idx, FIELDS[3],float(grp[0]) * 100.0 / float(len(df_sub)))
-            out_sdf.set_value(idx, FIELDS[4],grp.index[1])
-            out_sdf.set_value(idx, FIELDS[5],int(grp[1]))
-            out_sdf.set_value(idx, FIELDS[6],float(grp[1]) * 100.0 / float(len(df_sub)))
+            out_sdf.set_value(idx, field_schema.get('srln')[0],",".join(df_sub[f_value].unique().tolist()))
+            out_sdf.set_value(idx, field_schema.get('srln')[1],grp.index[0])
+            out_sdf.set_value(idx, field_schema.get('srln')[2],int(grp[0]))
+            out_sdf.set_value(idx, field_schema.get('srln')[3],float(grp[0]) * 100.0 / float(len(df_sub)))
+            out_sdf.set_value(idx, field_schema.get('srln')[4],grp.index[1])
+            out_sdf.set_value(idx, field_schema.get('srln')[5],int(grp[1]))
+            out_sdf.set_value(idx, field_schema.get('srln')[6],float(grp[1]) * 100.0 / float(len(df_sub)))
 
         elif len(grp) == 0:
-            out_sdf.set_value(idx, FIELDS[0],'None')
-            out_sdf.set_value(idx, FIELDS[0],'None')
-            out_sdf.set_value(idx, FIELDS[0],0)
-            out_sdf.set_value(idx, FIELDS[0],float(0))
-            out_sdf.set_value(idx, FIELDS[0],'None')
-            out_sdf.set_value(idx, FIELDS[0],0)
-            out_sdf.set_value(idx, FIELDS[0],float(0))
+            out_sdf.set_value(idx, field_schema.get('srln')[0],'None')
+            out_sdf.set_value(idx, field_schema.get('srln')[0],'None')
+            out_sdf.set_value(idx, field_schema.get('srln')[0],0)
+            out_sdf.set_value(idx, field_schema.get('srln')[0],float(0))
+            out_sdf.set_value(idx, field_schema.get('srln')[0],'None')
+            out_sdf.set_value(idx, field_schema.get('srln')[0],0)
+            out_sdf.set_value(idx, field_schema.get('srln')[0],float(0))
 
         elif len(grp) == 1:
-            out_sdf.set_value(idx, FIELDS[0],",".join(df_sub[f_value].unique().tolist()))
-            out_sdf.set_value(idx, FIELDS[0],grp.index[0])
-            out_sdf.set_value(idx, FIELDS[0],int(grp[0]))
-            out_sdf.set_value(idx, FIELDS[0],float(grp[0]) * 100.0 / float(len(df_sub)))
-            out_sdf.set_value(idx, FIELDS[0],'None')
-            out_sdf.set_value(idx, FIELDS[0],0)
-            out_sdf.set_value(idx, FIELDS[0],float(0))
+            out_sdf.set_value(idx, field_schema.get('srln')[0],",".join(df_sub[f_value].unique().tolist()))
+            out_sdf.set_value(idx, field_schema.get('srln')[0],grp.index[0])
+            out_sdf.set_value(idx, field_schema.get('srln')[0],int(grp[0]))
+            out_sdf.set_value(idx, field_schema.get('srln')[0],float(grp[0]) * 100.0 / float(len(df_sub)))
+            out_sdf.set_value(idx, field_schema.get('srln')[0],'None')
+            out_sdf.set_value(idx, field_schema.get('srln')[0],0)
+            out_sdf.set_value(idx, field_schema.get('srln')[0],float(0))
 
     return out_sdf
