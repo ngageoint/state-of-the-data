@@ -21,10 +21,10 @@ elapsed = (time.time() - start)
 print(elapsed)
 print("Done Running Indicators")
 
-# Checks
+# Checks - Let's get PA, TE, adn SL working first
 print('PA SDF: {}'.format(type(indicator.pa_sdf)))
-print('CO SDF: {}'.format(type(indicator.co_sdf)))
-print('LO SDF: {}'.format(type(indicator.lo_sdf)))
 print('TE SDF: {}'.format(type(indicator.te_sdf)))
-print('TH SDF: {}'.format(type(indicator.th_sdf)))
 print('SL SDF: {}'.format(type(indicator.sl_sdf)))
+#print('CO SDF: {}'.format(type(indicator.co_sdf)))
+#print('LO SDF: {}'.format(type(indicator.lo_sdf)))
+#print('TH SDF: {}'.format(type(indicator.th_sdf)))
