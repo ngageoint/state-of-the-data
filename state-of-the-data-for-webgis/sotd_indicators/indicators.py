@@ -1,4 +1,4 @@
-from src.sotd_indicators.utilities import *
+from sotd_indicators.utilities import *
 
 
 from arcgis.features import SpatialDataFrame, FeatureLayer
@@ -319,6 +319,9 @@ def temporal_currency(out_sdf, df_list, f_currency, non_std_date):
         #sq = df_current['SHAPE'].disjoint(geom) == False
         #df_current = df_current[sq].copy()
         if len(df_current) > 0:
+            if df_current[f_currency].dtype == 'int64':
+                df_current[f_currency] = pd.to_datetime(df_current[f_currency], unit='ms')
+
             dates = df_current[f_currency].tolist()
             count = len(dates)
             date_list_strings = [d for d in dates]
@@ -548,52 +551,64 @@ def source_lineage(out_sdf, df_list, f_value, f_search, search_val):
 
         df_sub = df_list[idx]
 
-        #df_sub = df_current.loc[df_current.disjoint(geom) == False].copy()
+        if df_sub.empty:
 
-        if f_search:
-            df_sub = df_sub.loc[df_sub[f_search] == search_val].copy()
+            out_sdf.set_value(idx, field_schema.get('srln')[0], 'None')
+            out_sdf.set_value(idx, field_schema.get('srln')[1], 'None')
+            out_sdf.set_value(idx, field_schema.get('srln')[2], 0)
+            out_sdf.set_value(idx, field_schema.get('srln')[3], float(0))
+            out_sdf.set_value(idx, field_schema.get('srln')[4], 'None')
+            out_sdf.set_value(idx, field_schema.get('srln')[5], 0)
+            out_sdf.set_value(idx, field_schema.get('srln')[6], float(0))
 
-        df_sub = df_sub.replace({np.nan: "NULL"})
+        else:
+            #df_sub = df_current.loc[df_current.disjoint(geom) == False].copy()
 
-        grp = df_sub.groupby(by=f_value).size() # Get the counts.
-        # sort the values to get the biggest on the top
-        #pandas 0.18
-        try:
-            grp.sort_values(axis=0, ascending=False,
-                        inplace=True, kind='quicksort',
-                        na_position='last')
-        #pandas 0.16
-        except:
-            grp.sort(axis=0, ascending=False,
-                        inplace=True, kind='quicksort',
-                        na_position='last')
+            if f_search:
+                df_sub = df_sub.loc[df_sub[f_search] == search_val].copy()
 
-        if len(grp) > 1:
-            grp = grp.head(2)
-            out_sdf.set_value(idx, field_schema.get('srln')[0],",".join(df_sub[f_value].unique().tolist()))
-            out_sdf.set_value(idx, field_schema.get('srln')[1],grp.index[0])
-            out_sdf.set_value(idx, field_schema.get('srln')[2],int(grp[0]))
-            out_sdf.set_value(idx, field_schema.get('srln')[3],float(grp[0]) * 100.0 / float(len(df_sub)))
-            out_sdf.set_value(idx, field_schema.get('srln')[4],grp.index[1])
-            out_sdf.set_value(idx, field_schema.get('srln')[5],int(grp[1]))
-            out_sdf.set_value(idx, field_schema.get('srln')[6],float(grp[1]) * 100.0 / float(len(df_sub)))
+            df_sub = df_sub.replace({np.nan: "NULL"})
 
-        elif len(grp) == 0:
-            out_sdf.set_value(idx, field_schema.get('srln')[0],'None')
-            out_sdf.set_value(idx, field_schema.get('srln')[0],'None')
-            out_sdf.set_value(idx, field_schema.get('srln')[0],0)
-            out_sdf.set_value(idx, field_schema.get('srln')[0],float(0))
-            out_sdf.set_value(idx, field_schema.get('srln')[0],'None')
-            out_sdf.set_value(idx, field_schema.get('srln')[0],0)
-            out_sdf.set_value(idx, field_schema.get('srln')[0],float(0))
+            grp = df_sub.groupby(by=f_value).size() # Get the counts.
+            # sort the values to get the biggest on the top
+            #pandas 0.18
+            try:
+                grp.sort_values(axis=0, ascending=False,
+                            inplace=True, kind='quicksort',
+                            na_position='last')
+            #pandas 0.16
+            except:
+                grp.sort(axis=0, ascending=False,
+                            inplace=True, kind='quicksort',
+                            na_position='last')
 
-        elif len(grp) == 1:
-            out_sdf.set_value(idx, field_schema.get('srln')[0],",".join(df_sub[f_value].unique().tolist()))
-            out_sdf.set_value(idx, field_schema.get('srln')[0],grp.index[0])
-            out_sdf.set_value(idx, field_schema.get('srln')[0],int(grp[0]))
-            out_sdf.set_value(idx, field_schema.get('srln')[0],float(grp[0]) * 100.0 / float(len(df_sub)))
-            out_sdf.set_value(idx, field_schema.get('srln')[0],'None')
-            out_sdf.set_value(idx, field_schema.get('srln')[0],0)
-            out_sdf.set_value(idx, field_schema.get('srln')[0],float(0))
+            if len(grp) > 1:
+                grp = grp.head(2)
+                out_sdf.set_value(idx, field_schema.get('srln')[0],",".join(df_sub[f_value].unique().tolist()))
+                out_sdf.set_value(idx, field_schema.get('srln')[1],grp.index[0])
+                out_sdf.set_value(idx, field_schema.get('srln')[2],int(grp[0]))
+                out_sdf.set_value(idx, field_schema.get('srln')[3],float(grp[0]) * 100.0 / float(len(df_sub)))
+                out_sdf.set_value(idx, field_schema.get('srln')[4],grp.index[1])
+                out_sdf.set_value(idx, field_schema.get('srln')[5],int(grp[1]))
+                out_sdf.set_value(idx, field_schema.get('srln')[6],float(grp[1]) * 100.0 / float(len(df_sub)))
+
+            elif len(grp) == 0:
+                out_sdf.set_value(idx, field_schema.get('srln')[0],'None')
+                out_sdf.set_value(idx, field_schema.get('srln')[1],'None')
+                out_sdf.set_value(idx, field_schema.get('srln')[2],0)
+                out_sdf.set_value(idx, field_schema.get('srln')[3],float(0))
+                out_sdf.set_value(idx, field_schema.get('srln')[4],'None')
+                out_sdf.set_value(idx, field_schema.get('srln')[5],0)
+                out_sdf.set_value(idx, field_schema.get('srln')[6],float(0))
+
+            elif len(grp) == 1:
+                out_sdf.set_value(idx, field_schema.get('srln')[0],",".join(df_sub[f_value].unique().tolist()))
+                out_sdf.set_value(idx, field_schema.get('srln')[1],grp.index[0])
+                out_sdf.set_value(idx, field_schema.get('srln')[2],int(grp[0]))
+                out_sdf.set_value(idx, field_schema.get('srln')[3],float(grp[0]) * 100.0 / float(len(df_sub)))
+                out_sdf.set_value(idx, field_schema.get('srln')[4],'None')
+                out_sdf.set_value(idx, field_schema.get('srln')[5],0)
+                out_sdf.set_value(idx, field_schema.get('srln')[6],float(0))
+                #print(out_sdf)
 
     return out_sdf

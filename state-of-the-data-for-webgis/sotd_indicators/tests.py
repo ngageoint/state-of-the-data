@@ -76,9 +76,9 @@ class TestNoUrlIndicators(unittest.TestCase):
         cls.indicator.set_grid_sdf()
         cls.indicator.set_features()
         cls.indicator.gis_conn = GIS(
-            'http://dbsne.maps.arcgis.com/home',
-            'jscarmazzi_DBSNE',
-            'gis12345'
+            'http://www.arcgis.com/home',
+            'test',
+            'test'
         )
 
     def test_poac(self):

@@ -1,4 +1,4 @@
-from src.sotd_indicators.indicators import *
+from sotd_indicators.indicators import *
 
 from arcgis.gis import GIS
 
@@ -10,8 +10,12 @@ class Indicator:
 
     def __init__(self):
 
-        # Publicly Available Resources
-        self.gis_conn = GIS()
+        # GIS Resources
+        self.pem      = None
+        self.key      = None
+        self.username = None
+        self.password = None
+        self.portal   = None
 
         # Selection Drivers
         self.grid_url = None
@@ -60,19 +64,44 @@ class Indicator:
             for k, v in dict(config.items(section)).items():
                 self.__setattr__(k, v)
 
-    def set_grid_sdf(self, lb_days=1000):
+    def set_gis(self):
+
+        if self.key != None and self.pem != None:
+            import ssl
+            ssl._create_default_https_context = ssl._create_unverified_context
+            self.gis_conn = GIS(url=self.portal,
+                                key_file=self.key,
+                                cert_file=self.pem,
+                                verify_cert=False)
+            print((self.gis_conn.users.me.role, self.gis_conn.users.me.username))
+        elif self.username != None and self.password != None:
+            self.gis_conn = GIS(url=self.portal,
+                                username=self.username, password=self.password)
+            print((self.gis_conn.users.me.role, self.gis_conn.users.me.username))
+        else:
+            self.gis_conn = GIS()
+
+    def set_grid_sdf(self, lb_days=1000, use_query=False):
 
         if not self.grid_url:
             raise Exception('Grid URL Not Set')
-
         else:
-            dates = get_dates_in_range(lb_days)
+            if use_query:
+                dates = get_dates_in_range(lb_days)
 
-            grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
+                grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
 
-            self.grid_wkid = grid_fl.properties.extent.spatialReference.wkid
+                self.grid_wkid = grid_fl.properties.extent.spatialReference.wkid
 
-            self.grid_sdf = grid_fl.query(where=form_query_string(dates)).df
+                self.grid_sdf = grid_fl.query(where=form_query_string(dates)).df
+            else:
+                grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
+
+                self.grid_wkid = grid_fl.properties.extent.spatialReference.wkid
+
+                self.grid_sdf = grid_fl.query(return_all_records=False).df
+
+
 
     def set_features(self):
 
@@ -96,6 +125,8 @@ class Indicator:
 
         created = False
         out_sdf = None
+
+        print(len(self.grid_sdf))
 
         for idx, row in enumerate(self.grid_sdf.iterrows()):
 
@@ -126,9 +157,12 @@ class Indicator:
                 out_sdf = df_current
 
             else:
-                out_sdf.merge_datasets(df_current)
+                #out_sdf.merge(df_current)
+                out_sdf = out_sdf.merge_datasets(df_current)
+                #out_sdf = out_sdf.append(df_current)
 
-        self.selected = out_sdf
+        self.selected = out_sdf.reset_index(drop=False)
+        print("Selected: " + str(len(out_sdf)))
         return created
 
     def create_layer(self, df, title):
@@ -164,8 +198,9 @@ class Indicator:
                 self.features,
                 p1
             )
-
+            #df.to_featureclass(gdb, 'poac', overwrite=True)
             if new_flag:
+                print(df.to_featureclass)
                 return [
                     df,
                     self.create_layer(
@@ -200,8 +235,9 @@ class Indicator:
                 self.features,
                 comparison_sdf
             )
-
+            #df.to_featureclass(gdb, 'cmpl', overwrite=True)
             if new_flag:
+                print(df)
                 return [
                     df,
                     self.create_layer(
@@ -237,8 +273,9 @@ class Indicator:
                 p1,
                 date
             )
-
+            #df.to_featureclass(gdb, 'curr', overwrite=True)
             if new_flag:
+                print(df)
                 return [
                     df,
                     self.create_layer(
@@ -299,7 +336,7 @@ class Indicator:
         except Exception as e:
             print('Exception Running Thematic Accuracy: {}'.format(str(e)))
 
-    def run_srln(self, p1, p2, search_value=1001, apply_edits=True):
+    def run_srln(self, p1, p2=None, search_value=1001, apply_edits=True):
 
         try:
             new_flag = self.set_selected('srln')
@@ -311,7 +348,8 @@ class Indicator:
                 p2,
                 search_value
             )
-
+            #df.to_featureclass(gdb, 'srln', overwrite=True)
+            print(df)
             if new_flag:
                 return [
                     df,

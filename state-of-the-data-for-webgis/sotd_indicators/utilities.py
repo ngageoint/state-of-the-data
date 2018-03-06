@@ -1,4 +1,4 @@
-from src.sotd_indicators.field_schema import *
+from sotd_indicators.field_schema import *
 
 
 from collections import Counter
