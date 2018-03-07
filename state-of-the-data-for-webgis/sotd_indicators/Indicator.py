@@ -16,6 +16,7 @@ class Indicator:
         self.username = None
         self.password = None
         self.portal   = None
+        self.debug    = None
 
         # Selection Drivers
         self.grid_url = None
@@ -198,7 +199,9 @@ class Indicator:
                 self.features,
                 p1
             )
-            #df.to_featureclass(gdb, 'poac', overwrite=True)
+            if self.debug:
+                df.to_featureclass(self.debug, 'poac', overwrite=True)
+                return df
             if new_flag:
                 print(df.to_featureclass)
                 return [
@@ -235,9 +238,10 @@ class Indicator:
                 self.features,
                 comparison_sdf
             )
-            #df.to_featureclass(gdb, 'cmpl', overwrite=True)
+            if self.debug:
+                df.to_featureclass(self.debug, 'cmpl', overwrite=True)
+                return df
             if new_flag:
-                print(df)
                 return [
                     df,
                     self.create_layer(
@@ -273,7 +277,9 @@ class Indicator:
                 p1,
                 date
             )
-            #df.to_featureclass(gdb, 'curr', overwrite=True)
+            if self.debug:
+                df.to_featureclass(self.debug, 'curr', overwrite=True)
+                return df
             if new_flag:
                 print(df)
                 return [
@@ -348,8 +354,9 @@ class Indicator:
                 p2,
                 search_value
             )
-            #df.to_featureclass(gdb, 'srln', overwrite=True)
-            print(df)
+            if self.debug:
+                df.to_featureclass(self.debug, 'srln', overwrite=True)
+                return df
             if new_flag:
                 return [
                     df,
