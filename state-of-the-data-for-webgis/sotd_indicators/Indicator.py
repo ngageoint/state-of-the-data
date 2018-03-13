@@ -230,41 +230,41 @@ class Indicator:
 
     def run_cmpl(self, comparison_sdf, apply_edits=True):
 
-        try:
-            new_flag = self.set_selected('cmpl')
+        #try:
+        new_flag = self.set_selected('cmpl')
 
-            df = completeness(
-                self.selected,
-                self.features,
-                comparison_sdf
-            )
-            if self.debug:
-                df.to_featureclass(self.debug, 'cmpl', overwrite=True)
-                return df
-            if new_flag:
+        df = completeness(
+            self.selected,
+            self.features,
+            comparison_sdf
+        )
+        if self.debug:
+            df.to_featureclass(self.debug, 'cmpl', overwrite=True)
+            return df
+        if new_flag:
+            return [
+                df,
+                self.create_layer(
+                    df,
+                    'Completeness {}'.format(round(time.time()))
+                )
+            ]
+
+        else:
+            if apply_edits:
                 return [
                     df,
-                    self.create_layer(
+                    self.update_layer(
                         df,
-                        'Completeness {}'.format(round(time.time()))
+                        self.cmpl_url
                     )
                 ]
 
             else:
-                if apply_edits:
-                    return [
-                        df,
-                        self.update_layer(
-                            df,
-                            self.cmpl_url
-                        )
-                    ]
+                return df
 
-                else:
-                    return df
-
-        except Exception as e:
-            print('Exception Running Completeness: {}'.format(str(e)))
+        #except Exception as e:
+        #    print('Exception Running Completeness: {}'.format(str(e)))
 
     def run_curr(self, p1, date='1901-1-1', apply_edits=True):
 

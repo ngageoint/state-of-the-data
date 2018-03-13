@@ -1,5 +1,5 @@
 *.pyc
 *config.py
 *.idea
-*config*
+*devconfig*
 *attributes*

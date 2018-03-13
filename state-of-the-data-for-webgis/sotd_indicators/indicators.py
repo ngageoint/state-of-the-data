@@ -116,38 +116,46 @@ def completeness(out_sdf, df_list, osm_sdf):
     print('Running Completeness')
 
     for idx, row in enumerate(out_sdf.iterrows()):
+        before_val = None
 
         geom = Geometry(row[1].SHAPE)
 
         data_sdf = df_list[idx]
+        if len(data_sdf) == 0:
+            print("No Foundation Features")
+            print(idx)
+            before_val = 0
+
+        else:
+            print("There are Foundation features")
+            print(idx)
+            sq = data_sdf[data_sdf.geometry.notnull()].geometry.disjoint(geom) == False
+            df_before = data_sdf[sq].copy()
+            geoms_before = df_before.clip(geom.extent)
+            geoms_before_sdf = SpatialDataFrame(geometry=geoms_before)
+
+            q_before = geoms_before_sdf['SHAPE'] == {"paths": []}
+            geoms_before_sdf = geoms_before_sdf[~q_before].copy()
+            geoms_before_sdf.reset_index(inplace=True, drop=True)
 
         geometry_type = osm_sdf.geometry_type
 
-        sq = data_sdf[data_sdf.geometry.notnull()].geometry.disjoint(geom) == False
-        df_before = data_sdf[sq].copy()
-
         sq = osm_sdf[osm_sdf.geometry.notnull()].geometry.disjoint(geom) == False
         df_after = osm_sdf[sq].copy()
-
         geoms_after = df_after.clip(geom.extent)
-        geoms_before = df_before.clip(geom.extent)
 
         #after == comparison data
         #before == your data
-        geoms_before_sdf = SpatialDataFrame(geometry=geoms_before)
         geoms_after_sdf = SpatialDataFrame(geometry=geoms_after)
 
         q_after = geoms_after_sdf['SHAPE'] == {"paths": []}
         geoms_after_sdf = geoms_after_sdf[~q_after].copy()
         geoms_after_sdf.reset_index(inplace=True, drop=True)
 
-        q_before = geoms_before_sdf['SHAPE'] == {"paths": []}
-        geoms_before_sdf = geoms_before_sdf[~q_before].copy()
-        geoms_before_sdf.reset_index(inplace=True, drop=True)
-
         # This Need Work
         if geometry_type == "Polygon":
-            before_val = geoms_before_sdf.geometry.project_as(4326).get_area('GEODESIC','SQUAREKILOMETERS').sum()
+            if before_val == None:
+                before_val = geoms_before_sdf.geometry.project_as(4326).get_area('GEODESIC','SQUAREKILOMETERS').sum()
             after_val = geoms_after_sdf.geometry.project_as(4326).get_area('GEODESIC','SQUAREKILOMETERS').sum()
             if after_val > 0:
                 score = get_cp_score(ratio=before_val/after_val,
@@ -162,7 +170,8 @@ def completeness(out_sdf, df_list, osm_sdf):
             out_sdf.set_value(idx,field_schema.get('cmpl')[2],score)
 
         elif geometry_type == "Polyline":
-            before_val = geoms_before_sdf.geometry.project_as(4326).get_length('GEODESIC','KILOMETERS').sum()
+            if before_val == None:
+                before_val = geoms_before_sdf.geometry.project_as(4326).get_length('GEODESIC','KILOMETERS').sum()
             after_val = geoms_after_sdf.geometry.project_as(4326).get_length('GEODESIC','KILOMETERS').sum()
 
             if after_val > 0:
@@ -178,7 +187,10 @@ def completeness(out_sdf, df_list, osm_sdf):
             out_sdf.set_value(idx,field_schema.get('cmpl')[2],score)
 
         else:
-            before_count = len(geoms_before_sdf)
+            if before_val == None:
+                before_count = len(geoms_before_sdf)
+            else:
+                before_count = 0
             after_count = len(geoms_after_sdf)
             if after_count > 0:
                 score = get_cp_score(ratio=before_count/after_count,
@@ -196,8 +208,10 @@ def completeness(out_sdf, df_list, osm_sdf):
 
         del sq
         del df_after
-        del df_before
         del geom
+        if before_val != None:
+            print(before_val)
+        #    del df_before
 
     return out_sdf
 
