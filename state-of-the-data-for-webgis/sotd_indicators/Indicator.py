@@ -18,6 +18,15 @@ class Indicator:
         self.portal   = None
         self.debug    = None
 
+        #if GIS2 is specified
+        self.pub_pem      = None
+        self.pub_key      = None
+        self.pub_username = None
+        self.pub_password = None
+        self.pub_portal   = None
+        self.pub_gis_conn = None
+
+
         # Selection Drivers
         self.grid_url = None
         self.feat_url = None
@@ -66,6 +75,13 @@ class Indicator:
                 self.__setattr__(k, v)
 
     def set_gis(self):
+
+        if self.pub_password!=None and self.pub_username!=None:
+            self.pub_gis_conn = GIS(url=self.pub_portal,
+                                username=self.pub_username, password=self.pub_password)
+            print((self.pub_gis_conn.users.me.role, self.pub_gis_conn.users.me.username))
+        else:
+            self.pub_gis_conn = None
 
         if self.key != None and self.pem != None:
             import ssl
@@ -170,10 +186,17 @@ class Indicator:
 
         print('Creating New Hosted Feature Layer: {}'.format(title))
 
-        new_layer = df.to_featurelayer(
-            title,
-            gis=self.gis_conn
-        )
+        if self.pub_gis_conn==None:
+            new_layer = df.to_featurelayer(
+                title,
+                gis=self.gis_conn
+            )
+        else:
+            new_layer = df.to_featurelayer(
+                title,
+                gis=self.pub_gis_conn
+            )
+
 
         return new_layer.id
 
@@ -230,41 +253,41 @@ class Indicator:
 
     def run_cmpl(self, comparison_sdf, apply_edits=True):
 
-        #try:
-        new_flag = self.set_selected('cmpl')
+        try:
+            new_flag = self.set_selected('cmpl')
 
-        df = completeness(
-            self.selected,
-            self.features,
-            comparison_sdf
-        )
-        if self.debug:
-            df.to_featureclass(self.debug, 'cmpl', overwrite=True)
-            return df
-        if new_flag:
-            return [
-                df,
-                self.create_layer(
-                    df,
-                    'Completeness {}'.format(round(time.time()))
-                )
-            ]
-
-        else:
-            if apply_edits:
+            df = completeness(
+                self.selected,
+                self.features,
+                comparison_sdf
+            )
+            if self.debug:
+                df.to_featureclass(self.debug, 'cmpl', overwrite=True)
+                return df
+            if new_flag:
                 return [
                     df,
-                    self.update_layer(
+                    self.create_layer(
                         df,
-                        self.cmpl_url
+                        'Completeness {}'.format(round(time.time()))
                     )
                 ]
 
             else:
-                return df
+                if apply_edits:
+                    return [
+                        df,
+                        self.update_layer(
+                            df,
+                            self.cmpl_url
+                        )
+                    ]
 
-        #except Exception as e:
-        #    print('Exception Running Completeness: {}'.format(str(e)))
+                else:
+                    return df
+
+        except Exception as e:
+            print('Exception Running Completeness: {}'.format(str(e)))
 
     def run_curr(self, p1, date='1901-1-1', apply_edits=True):
 
