@@ -133,8 +133,23 @@ def process_source_lineage(grid_sdf, data_sdf, value_field=None):
                 arcpy.AddMessage("Field has subtypes")
                 use_subtypes = True
 
+        poly_desc = arcpy.Describe(grid_sdf)
+        fc_desc = arcpy.Describe(data_sdf)
+        if poly_desc.extent.within(fc_desc.extent):
+
+            temp_fc = 'in_memory/clip'
+            arcpy.AddMessage('Clipping features to polygon')
+            arcpy.Clip_analysis(data_sdf, grid_sdf, temp_fc)
+            arcpy.AddMessage('Created in_memory fc')
+            data_sdf = geomotion.SpatialDataFrame.from_featureclass(temp_fc,
+                                                            fields=[value_field])
+            arcpy.AddMessage('features read into spatial dataframe after clipping')
+        else:
+            data_sdf = geomotion.SpatialDataFrame.from_featureclass(data_sdf, fields=[value_field])
+            arcpy.AddMessage('features read into spatial dataframe without clipping')
+
         grid_sdf = geomotion.SpatialDataFrame.from_featureclass(grid_sdf)
-        data_sdf = geomotion.SpatialDataFrame.from_featureclass(data_sdf, fields=[value_field])
+        #data_sdf = geomotion.SpatialDataFrame.from_featureclass(data_sdf, fields=[value_field])
         index = data_sdf.sindex
         results = []
         for idx, row in enumerate(grid_sdf.iterrows()):

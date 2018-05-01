@@ -119,16 +119,33 @@ def extend_table(fc, array):
                     }
             )
 #--------------------------------------------------------------------------
-def process_source_lineage(grid_sdf, data_sdf, search_field=None, value_field=None, where_clause=None):
+def process_source_lineage(grid, data, search_field=None, value_field=None, where_clause=None):
     """
     performs the operation to generate the
     """
     try:
-        grid_sdf = geomotion.SpatialDataFrame.from_featureclass(grid_sdf,
-                    where_clause=where_clause)
-        data_sdf = geomotion.SpatialDataFrame.from_featureclass(data_sdf,
+        poly_desc = arcpy.Describe(grid)
+        fc_desc = arcpy.Describe(data)
+        if poly_desc.extent.within(fc_desc.extent):
+
+            temp_fc = 'in_memory/clip'
+            arcpy.AddMessage('Clipping features to polygon')
+            arcpy.Clip_analysis(data, grid, temp_fc)
+            arcpy.AddMessage('Created in_memory fc')
+            data_sdf = geomotion.SpatialDataFrame.from_featureclass(temp_fc,
                     fields=[search_field, value_field],
                     encoding='utf-8')
+            arcpy.AddMessage('features read into spatial dataframe after clipping')
+        else:
+            data_sdf = geomotion.SpatialDataFrame.from_featureclass(data_sdf,
+                    fields=[search_field, value_field],
+                    encoding='utf-8')
+            arcpy.AddMessage('features read into spatial dataframe without clipping')
+
+
+        grid_sdf = geomotion.SpatialDataFrame.from_featureclass(grid,
+                    where_clause=where_clause)
+
         index = data_sdf.sindex
         results = []
         for idx, row in enumerate(grid_sdf.iterrows()):
@@ -263,8 +280,8 @@ def main(*argv):
             out_grid = arcpy.CopyFeatures_management(polygon_grid, out_grid)[0]
 
             arcpy.AddMessage("Working on feature class: %s" % os.path.basename(fc))
-            array = process_source_lineage(grid_sdf=out_grid,
-                                           data_sdf=fc,
+            array = process_source_lineage(grid=out_grid,
+                                           data=fc,
                                            search_field=source_field,
                                            value_field=value_field)
             extend_table(out_grid, array)
@@ -280,8 +297,8 @@ def main(*argv):
 
             arcpy.AddMessage("Analyzing " + oids_string)
             arcpy.AddMessage("Working on feature class: %s" % os.path.basename(fc))
-            array = process_source_lineage(grid_sdf=output_fc,
-                                           data_sdf=fc,
+            array = process_source_lineage(grid=output_fc,
+                                           data=fc,
                                            search_field=source_field,
                                            value_field=value_field,
                                            where_clause='OBJECTID IN ' + oids_string)

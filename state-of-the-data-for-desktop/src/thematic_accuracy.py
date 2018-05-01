@@ -314,7 +314,23 @@ def main(*argv):
                                         where_clause=where_clause)
 
 
-        data_sdf = SpatialDataFrame.from_featureclass(fc, fields=[value_field])
+
+        poly_desc = arcpy.Describe(polygon_grid)
+        fc_desc = arcpy.Describe(fc)
+        if poly_desc.extent.within(fc_desc.extent):
+
+            temp_fc = 'in_memory/clip'
+            arcpy.AddMessage('Clipping features to polygon')
+            arcpy.Clip_analysis(fc, polygon_grid, temp_fc)
+            arcpy.AddMessage('Created in_memory fc')
+            data_sdf = SpatialDataFrame.from_featureclass(temp_fc,
+                                                            fields=[value_field])
+            arcpy.AddMessage('features read into spatial dataframe after clipping')
+        else:
+            data_sdf = SpatialDataFrame.from_featureclass(fc, fields=[value_field])
+            arcpy.AddMessage('features read into spatial dataframe without clipping')
+
+        #data_sdf = SpatialDataFrame.from_featureclass(fc, fields=[value_field])
         index = data_sdf.sindex
         for idx, row in enumerate(grid_sdf.iterrows()):
             geom = row[1].SHAPE
