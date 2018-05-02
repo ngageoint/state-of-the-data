@@ -342,7 +342,7 @@ def main(*argv):
 ##        else:
 ##            sr = None
         error_fc = output_fcs
-        #error_fc = create_error_fc(output_fcs,'POLYLINE',sr=sr)
+        error_fc = create_error_fc(output_fcs,'POLYLINE',sr=sr)
         del sr
         edit = da.Editor(outputGDB)
         edit.startEditing(False, True)

@@ -270,18 +270,43 @@ def main(*argv):
 
             where_clause = 'OBJECTID IN ' + oids_string
 
+        error_field = (error_field_def, error_field_count)
+
         #  Process the Data
         #
-        error_field = (error_field_def, error_field_count)
-        grid_sdf = SpatialDataFrame.from_featureclass(filename=output_fc,
-                                            where_clause=where_clause)
-        if sql_clause:
-            attr_sdf = SpatialDataFrame.from_featureclass(attr_features,
+
+        poly_desc = arcpy.Describe(output_fc)
+        fc_desc = arcpy.Describe(attr_features)
+        if poly_desc.extent.within(fc_desc.extent):
+
+            temp_fc = 'in_memory/clip'
+            arcpy.AddMessage('Clipping features to polygon')
+            arcpy.Clip_analysis(attr_features, output_fc, temp_fc)
+            arcpy.AddMessage('Created in_memory fc')
+            #data_sdf = geomotion.SpatialDataFrame.from_featureclass(temp_fc,
+            #                                                fields=[value_field])
+            if sql_clause:
+                attr_sdf = SpatialDataFrame.from_featureclass(temp_fc,
                                                       fields=error_field,
                                                       where_clause=sql_clause)
-        else:
-            attr_sdf = SpatialDataFrame.from_featureclass(attr_features,
+            else:
+                attr_sdf = SpatialDataFrame.from_featureclass(temp_fc,
                                                       fields=error_field)
+            arcpy.AddMessage('features read into spatial dataframe after clipping')
+        else:
+            #data_sdf = geomotion.SpatialDataFrame.from_featureclass(, fields=[value_field])
+            arcpy.AddMessage('features read into spatial dataframe without clipping')
+            if sql_clause:
+                attr_sdf = SpatialDataFrame.from_featureclass(attr_features,
+                                                      fields=error_field,
+                                                      where_clause=sql_clause)
+            else:
+                attr_sdf = SpatialDataFrame.from_featureclass(attr_features,
+                                                      fields=error_field)
+
+        grid_sdf = SpatialDataFrame.from_featureclass(filename=output_fc,
+                                            where_clause=where_clause)
+
         index = attr_sdf.sindex
         for idx, row in enumerate(grid_sdf.iterrows()):
             errors = []
