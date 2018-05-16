@@ -137,7 +137,7 @@ def process_source_lineage(grid, data, search_field=None, value_field=None, wher
                     encoding='utf-8')
             arcpy.AddMessage('features read into spatial dataframe after clipping')
         else:
-            data_sdf = geomotion.SpatialDataFrame.from_featureclass(data_sdf,
+            data_sdf = geomotion.SpatialDataFrame.from_featureclass(data,
                     fields=[search_field, value_field],
                     encoding='utf-8')
             arcpy.AddMessage('features read into spatial dataframe without clipping')
