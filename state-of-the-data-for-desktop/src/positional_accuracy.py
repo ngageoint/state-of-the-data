@@ -33,6 +33,7 @@ out_fields = ('MEAN', 'MEDIAN',
               'NO_DATE_PCT', 'FEATURE_CNT',
               'PA_SCORE', "TIER")
 
+bad_vals = [-999999, -999999.0]
 
 #--------------------------------------------------------------------------
 class FunctionError(Exception):
@@ -247,6 +248,7 @@ def main(*argv):
                 elif PDVERSION[1] > 16:
                     df_notnull = df_notnull.drop(value_field, axis=1).join(df_notnull[value_field].apply(pd.to_numeric, errors='coerce')).copy()  # CHANGES NON NUMERIC ROWS to NaN
                 df_notnull = df_notnull.loc[df_notnull[value_field].notnull() == True].copy() # Drops NaN values
+                df_notnull = df_notnull[~df_notnull[value_field].isin(bad_vals)]  #Drop -999999 values
                 not_null_count = len(df_notnull)
                 null_count = len(df_current) - not_null_count
                 if PDVERSION[1] == 16:
