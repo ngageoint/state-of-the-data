@@ -1,5 +1,8 @@
 from sotd_indicators.field_schema import *
 
+from arcgis.geoenrichment import enrich
+from arcgis.raster import ImageryLayer
+from arcgis.geometry import Geometry
 
 from collections import Counter
 import pandas as pd
@@ -378,3 +381,41 @@ def population_scale(domScale, GRLS):
     else:
         POPULATION_SCALE = 0
     return POPULATION_SCALE
+
+
+def validate_field(field, field_list):
+
+    """
+    Attempt to match case before raising Exception. Perhaps KeyError would be better?
+    :param field: String representing a Field expected in field_list.
+    :param field_list: Column headers generated from Pandas Data Frame.
+    :return: String representing proper case for input field.
+    """
+
+    if field not in field_list:
+        field = field.lower()
+        if field not in field_list:
+            field = field.upper()
+            if field not in field_list:
+                raise Exception('The Field {} Was Not Found In Field List'.format(field))
+
+    return field
+
+
+def validate_geo_gis(geo_gis):
+
+    try:
+        enrich([Geometry({"x":-122.435,"y":37.785})], gis=geo_gis)
+    except RuntimeError:
+        raise Exception('GIS Does Not Support GeoEnrichment: {}'.format(geo_gis))
+
+
+def validate_img_gis(geo_gis, img_url):
+
+    try:
+        img_lyr = ImageryLayer(img_url, gis=geo_gis)
+        img_lyr.get_samples(Geometry({"x":-122.435,"y":37.785}), geometry_type='esriGeometryPoint')
+        print('Thematic Service GIS: {}'.format(geo_gis))
+
+    except RuntimeError:
+        raise Exception('{} Does Not Support getSamples on Service: {}'.format(geo_gis, img_url))

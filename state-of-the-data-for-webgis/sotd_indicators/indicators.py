@@ -1,17 +1,23 @@
 from sotd_indicators.utilities import *
-
+from osm_runner import *
+import arcgis
 
 from arcgis.features import SpatialDataFrame, FeatureLayer
 from arcgis.geometry import Geometry, Polyline, filters
+from arcgis.geoenrichment import enrich
+from arcgis.raster import ImageryLayer
 
 import pandas as pd
 import numpy as np
 import json
+import sys
 
 
 def positional_accuracy(out_sdf, df_list, val_field):
 
     print('Running Positional Accuracy')
+
+    val_field = validate_field(val_field, list(df_list[0]))
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
@@ -116,19 +122,21 @@ def completeness(out_sdf, df_list, osm_sdf):
     print('Running Completeness')
 
     for idx, row in enumerate(out_sdf.iterrows()):
-        before_val = None
 
+        before_val = None
         geom = Geometry(row[1].SHAPE)
+
+        # Unpack Geom Extent as OSM Expects
+        bbox = (geom.extent[1], geom.extent[0], geom.extent[3], geom.extent[2])
+
+        # Fetch OSM SpatialDataFrame
+        osm_sdf = gen_osm_sdf('line', bbox, osm_tag='highway')
 
         data_sdf = df_list[idx]
         if len(data_sdf) == 0:
-            print("No Foundation Features")
-            print(idx)
             before_val = 0
 
         else:
-            print("There are Foundation features")
-            print(idx)
             sq = data_sdf[data_sdf.geometry.notnull()].geometry.disjoint(geom) == False
             df_before = data_sdf[sq].copy()
             geoms_before = df_before.clip(geom.extent)
@@ -142,11 +150,11 @@ def completeness(out_sdf, df_list, osm_sdf):
 
         sq = osm_sdf[osm_sdf.geometry.notnull()].geometry.disjoint(geom) == False
         df_after = osm_sdf[sq].copy()
+
         geoms_after = df_after.clip(geom.extent)
 
-        #after == comparison data
-        #before == your data
         geoms_after_sdf = SpatialDataFrame(geometry=geoms_after)
+        #geoms_after_sdf = SpatialDataFrame({'Pass': 'Pass'}, geometry=geoms_after, index=[0])
 
         q_after = geoms_after_sdf['SHAPE'] == {"paths": []}
         geoms_after_sdf = geoms_after_sdf[~q_after].copy()
@@ -171,8 +179,13 @@ def completeness(out_sdf, df_list, osm_sdf):
 
         elif geometry_type == "Polyline":
             if before_val == None:
-                before_val = geoms_before_sdf.geometry.project_as(4326).get_length('GEODESIC','KILOMETERS').sum()
-            after_val = geoms_after_sdf.geometry.project_as(4326).get_length('GEODESIC','KILOMETERS').sum()
+
+                geom = geoms_before_sdf.geometry
+                geom_projected = geoms_before_sdf.geometry.project_as(3857)
+                before_val = int(sum(geom_projected.length.tolist()))
+
+            geom_projected = geoms_before_sdf.geometry.project_as(3857)
+            after_val = int(sum(geom_projected.length.tolist()))
 
             if after_val > 0:
                 score = get_cp_score(ratio=before_val/after_val,
@@ -216,7 +229,7 @@ def completeness(out_sdf, df_list, osm_sdf):
     return out_sdf
 
 
-def logical_consistency(out_sdf, df_list, feat_url, err_cnt, err_def, attr_key, attr_file):
+def logical_consistency(out_sdf, df_list, feat_lyr, err_cnt, err_def, attr_key, attr_file):
 
     print('Running Logical Consistency')
 
@@ -231,33 +244,36 @@ def logical_consistency(out_sdf, df_list, feat_url, err_cnt, err_def, attr_key, 
 
     empty = (-999999, '', None, 'noInformation', 'None', 'Null', 'NULL', -999999.0)
 
-    # TODO - Pass in GIS Object or Valid FeatureLayer
     domain_dict = {}  # e.g. {'AP030': 'Road', 'AN010': 'Railway'}
-    for t in FeatureLayer(feat_url).properties.types:
-        if 'F_CODE' in t['domains'].keys():
-            for cv in t['domains']['F_CODE']['codedValues']:
+
+    for t in feat_lyr.properties.types:
+        if 'f_code' in t['domains'].keys():
+            for cv in t['domains']['f_code']['codedValues']:
                 domain_dict.update({cv['code']: cv['name']})
 
     attr_dict = json.load(open(attr_file))
+
     if attr_dict.get(attr_key, None):
-        specificAttributeDict = {k: v for k, v in attr_dict.get(attr_key).items()}
+        specificAttributeDict = {k: [v.lower() for v in v] for k, v in attr_dict.get(attr_key).items()}
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
         data_sdf = df_list[idx]
 
-        stList = set(data_sdf['F_CODE'].values)
+        stList = set(data_sdf['f_code'].values)
 
         temp_result_df = pd.DataFrame(columns = TMP_FIELDS)#, dtypes=DTYPES)
 
         geoms=[]
         for idx_attr, row in data_sdf.iterrows():
-            if row['F_CODE'] in stList:
-                if row['F_CODE'] in specificAttributeDict:
-                    vals = [
-                        i for i in specificAttributeDict[row['F_CODE']]
-                        if row[i] in empty
-                    ]
+
+            if row['f_code'] in stList:
+
+                if row['f_code'] in specificAttributeDict:
+
+                    vals = []
+                    for i in specificAttributeDict[row['f_code']]:
+                        vals.append(i)
 
                     line = row['SHAPE']
                     def_count = len(vals)
@@ -265,19 +281,18 @@ def logical_consistency(out_sdf, df_list, feat_url, err_cnt, err_def, attr_key, 
                     geoms.append(polyline)
                     if def_count > 0:
                         fs = ",".join(vals)
-                        oid = row['OBJECTID']
+                        oid = row['objectid']
 
                         temp_result_df.set_value(idx_attr, TMP_FIELDS[0],fs)
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[1],feat_url)
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[2],(domain_dict[row['F_CODE']]))
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[1],feat_lyr)
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[2],(domain_dict[row['f_code']]))
                         temp_result_df.set_value(idx_attr, TMP_FIELDS[3],round(oid))
                         temp_result_df.set_value(idx_attr, TMP_FIELDS[4],len(vals))
 
-
                     else:
                         temp_result_df.set_value(idx_attr, TMP_FIELDS[0],'N/A')
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[1],feat_url)
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[2],(domain_dict[row['F_CODE']]))
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[1],feat_lyr)
+                        temp_result_df.set_value(idx_attr, TMP_FIELDS[2],(domain_dict[row['f_code']]))
                         temp_result_df.set_value(idx_attr, TMP_FIELDS[3],round(oid))
                         temp_result_df.set_value(idx_attr, TMP_FIELDS[4],len(vals))
 
@@ -324,6 +339,8 @@ def logical_consistency(out_sdf, df_list, feat_url, err_cnt, err_def, attr_key, 
 def temporal_currency(out_sdf, df_list, f_currency, non_std_date):
 
     print('Running Temporal Currency')
+
+    f_currency = validate_field(f_currency, list(df_list[0]))
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
@@ -449,16 +466,46 @@ def temporal_currency(out_sdf, df_list, f_currency, non_std_date):
     return out_sdf
 
 
-def thematic_accuracy(out_sdf, df_list, f_thm_acc):
+def thematic_accuracy(out_sdf, df_list, f_thm_acc, geo_gis, img_url):
 
     print('Running Thematic Accuracy')
+
+    f_thm_acc = validate_field(f_thm_acc, list(df_list[0]))
+
+    # List Used for Logging Differences in Population Sources
+    pop_diff = []
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
         df_current = df_list[idx]
 
-        #sq = df_current['SHAPE'].disjoint(geom) == False
-        #df_current = df_current[sq].copy()
+        # Pull GeoEnrichment Figures
+        enriched = enrich([row[1]['SHAPE']], gis=geo_gis)
+        if 'TOTPOP' not in list(enriched):
+            enriched_pop = -1
+        else:
+            enriched_pop = enriched.TOTPOP[0]
+
+        # Pull Samples From Configured Population Service
+        img_lyr = ImageryLayer(img_url, gis=geo_gis)
+        cells = img_lyr.properties.maxImageHeight * img_lyr.properties.maxImageWidth
+        samples = img_lyr.get_samples(
+            row[1]['SHAPE'],
+            geometry_type='esriGeometryPolygon',
+            sample_count=cells
+        )
+        sample_total = sum([int(sample['value']) for sample in samples])
+
+        # Push Significant Values Into List for Averaging
+        if enriched_pop or sample_total < 100:
+            pass
+        else:
+            diff = abs(enriched_pop - sample_total)
+            if diff > 100:
+                pop_diff.append(diff)
+
+        tot_pop = enriched_pop if enriched_pop > 0 else sample_total
+        tot_pop = tot_pop if tot_pop > 0 else -1
 
         if len(df_current) > 0:
             count = len(df_current)
@@ -506,7 +553,13 @@ def thematic_accuracy(out_sdf, df_list, f_thm_acc):
 
             MSP = get_msp(scale=common) # SHOULD UPDATE MISSION_PLANNING FIELD
 
-            SCORE_VALUE = get_equal_breaks_score(mean=out_sdf['MEAN'][0])# get_equal_breaks_score(output_features, ['MEAN','EQUAL']) # PUT SCORE IN EQUAL
+            if not out_sdf['MEAN'][0]:
+                m = 0
+            else:
+                m = out_sdf['MEAN'][0]
+
+            SCORE_VALUE = get_equal_breaks_score(m)# get_equal_breaks_score(output_features, ['MEAN','EQUAL']) # PUT SCORE IN EQUAL
+
             #GRLS = SCORE_VALUE
             #domScale = common
             # FIELD 1 is the source, Field 2 is the field to be updated
@@ -540,13 +593,15 @@ def thematic_accuracy(out_sdf, df_list, f_thm_acc):
             out_sdf.set_value(idx, field_schema.get('them')[24],round(count_1000000*100/count,1))
             out_sdf.set_value(idx, field_schema.get('them')[25],count)
             out_sdf.set_value(idx, field_schema.get('them')[26],str(MSP)) #MISSION_PLANNING FIELD
-            out_sdf.set_value(idx, field_schema.get('them')[27],SCORE_VALUE)#), # THEMATIC SCALE VALUE
+            # out_sdf.set_value(idx, field_schema.get('them')[27],SCORE_VALUE)#), # THEMATIC SCALE VALUE
+            out_sdf.set_value(idx, field_schema.get('them')[27], tot_pop)  # ), # THEMATIC SCALE VALUE
             out_sdf.set_value(idx, field_schema.get('them')[28],population_scale(common, SCORE_VALUE)) # POPULATION_SCALE
             #to 28
 
         else:
             for i in range(0,25):
                 out_sdf.set_value(idx, field_schema.get('them')[i],-1)
+
             out_sdf.set_value(idx, field_schema.get('them')[25],0)
             out_sdf.set_value(idx, field_schema.get('them')[26],'N/A')
             out_sdf.set_value(idx, field_schema.get('them')[27],'N/A')
@@ -554,12 +609,19 @@ def thematic_accuracy(out_sdf, df_list, f_thm_acc):
 
         del df_current
 
+    print('Average Difference of Population Estimates: {}'.format(np.average(pop_diff)))
+
     return out_sdf
 
 
 def source_lineage(out_sdf, df_list, f_value, f_search, search_val):
 
     print('Running Source Lineage')
+
+    f_value = validate_field(f_value, list(df_list[0]))
+
+    if f_search:
+        f_search = validate_field(f_search, list(df_list[0]))
 
     for idx, row in enumerate(out_sdf.iterrows()):
 
