@@ -3,12 +3,14 @@ from sotd_indicators.field_schema import *
 from arcgis.geoenrichment import enrich
 from arcgis.raster import ImageryLayer
 from arcgis.geometry import Geometry
+from arcgis.gis.server import Server
 
 from collections import Counter
 import pandas as pd
 import numpy as np
 import datetime
 import arcpy
+import os
 
 
 # Set Grid
@@ -419,3 +421,52 @@ def validate_img_gis(geo_gis, img_url):
 
     except RuntimeError:
         raise Exception('{} Does Not Support getSamples on Service: {}'.format(geo_gis, img_url))
+
+
+def update_img_service(sdf, gis, svc, ras, url, fld):
+
+    # Create Temporary Feature Class
+    res = sdf.to_featureclass(
+        os.path.dirname(ras),
+        'TEMP_THEM',
+        overwrite=True
+    )
+    print('Feature Class: {}'.format(res))
+
+    # Get List of Server Services
+    server = Server(url, gis=gis)
+    print(server)
+    server_manager = server.services
+    services = server_manager.list(folder=fld)
+
+    # Get Service Object
+    target_service = None
+    for service in services:
+        if service.properties.serviceName == svc.split('/')[-2]:
+            target_service = service
+        else:
+            print(service.url, svc)
+    if not target_service:
+        raise Exception('Target Service Not Found: {}'.format(svc))
+
+    # Stop Target Service
+    stop = target_service.stop()
+    print('Target Service Stopped: {}'.format(stop))
+
+    # Overwrite Existing Data
+    arcpy.env.overwriteOutput = True
+    arcpy.PolygonToRaster_conversion(
+        in_features=res,
+        value_field="POPULATION_SCALE",
+        out_rasterdataset=ras,
+        cell_assignment="CELL_CENTER",
+        priority_field="NONE",
+        cellsize="0.15"
+    )
+
+    # Remove Temporary File
+    arcpy.Delete_management(res)
+
+    # Start Target Service
+    start = target_service.start()
+    print('Target Service Started: {}'.format(start))
