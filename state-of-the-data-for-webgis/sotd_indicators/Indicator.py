@@ -17,8 +17,9 @@ class Indicator:
         self.password = None
         self.portal   = None
         self.debug    = None
+        self.gis_conn = None
 
-        #if GIS2 is specified
+        # Publishing GIS
         self.pub_pem      = None
         self.pub_key      = None
         self.pub_username = None
@@ -26,6 +27,13 @@ class Indicator:
         self.pub_portal   = None
         self.pub_gis_conn = None
 
+        # GeoEnrichment GIS
+        self.geo_pem      = None
+        self.geo_key      = None
+        self.geo_username = None
+        self.geo_password = None
+        self.geo_portal   = None
+        self.geo_gis_conn = None
 
         # Selection Drivers
         self.grid_url = None
@@ -61,6 +69,9 @@ class Indicator:
         self.features  = None
         self.selected  = None
 
+        # Extra Values
+        self.them_pop = None
+
     def load_config(self, config_file):
 
         # Read Incoming Config File
@@ -76,25 +87,44 @@ class Indicator:
 
     def set_gis(self):
 
-        if self.pub_password!=None and self.pub_username!=None:
-            self.pub_gis_conn = GIS(url=self.pub_portal,
-                                username=self.pub_username, password=self.pub_password)
-            print((self.pub_gis_conn.users.me.role, self.pub_gis_conn.users.me.username))
+        # Set Publication GIS Object
+        if self.pub_password != None and self.pub_username != None:
+            self.pub_gis_conn = GIS(
+                url=self.pub_portal,
+                username=self.pub_username,
+                password=self.pub_password
+            )
         else:
             self.pub_gis_conn = None
+
+        # Set GeoEnrichment GIS Object
+        if self.geo_password != None and self.geo_username != None:
+            self.geo_gis_conn = GIS(
+                url=self.geo_portal,
+                username=self.geo_username,
+                password=self.geo_password
+            )
+        else:
+            self.geo_gis_conn = None
 
         if self.key != None and self.pem != None:
             import ssl
             ssl._create_default_https_context = ssl._create_unverified_context
-            self.gis_conn = GIS(url=self.portal,
-                                key_file=self.key,
-                                cert_file=self.pem,
-                                verify_cert=False)
-            print((self.gis_conn.users.me.role, self.gis_conn.users.me.username))
+            self.gis_conn = GIS(
+                url=self.portal,
+                key_file=self.key,
+                cert_file=self.pem,
+                verify_cert=False
+            )
+
         elif self.username != None and self.password != None:
-            self.gis_conn = GIS(url=self.portal,
-                                username=self.username, password=self.password)
-            print((self.gis_conn.users.me.role, self.gis_conn.users.me.username))
+            self.gis_conn = GIS(
+                url=self.portal,
+                username=self.username,
+                password=self.password,
+                verify_cert=False
+            )
+
         else:
             self.gis_conn = GIS()
 
@@ -103,7 +133,9 @@ class Indicator:
         if not self.grid_url:
             raise Exception('Grid URL Not Set')
         else:
+
             if use_query:
+
                 dates = get_dates_in_range(lb_days)
 
                 grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
@@ -111,14 +143,14 @@ class Indicator:
                 self.grid_wkid = grid_fl.properties.extent.spatialReference.wkid
 
                 self.grid_sdf = grid_fl.query(where=form_query_string(dates)).df
+
             else:
+
                 grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
 
                 self.grid_wkid = grid_fl.properties.extent.spatialReference.wkid
 
                 self.grid_sdf = grid_fl.query(return_all_records=False).df
-
-
 
     def set_features(self):
 
@@ -143,17 +175,25 @@ class Indicator:
         created = False
         out_sdf = None
 
-        print(len(self.grid_sdf))
+        # Indicator Feature Layer
+        indicator_url = self.__getattribute__(indicator + '_url')
+        data_fl = FeatureLayer(url=indicator_url, gis=self.gis_conn)
 
+        # Enumerate Used to Leverage the Merge Method on the Data Frame.
+        # Set the First and Merge the Remainder to the First.
         for idx, row in enumerate(self.grid_sdf.iterrows()):
 
-            if not self.__getattribute__(indicator + '_url'):
+            # Negative Buffer Used to Avoid Selecting More Than 1 Cell
+            sp_filter = filters.intersects(
+                Geometry(row[1].SHAPE).buffer(-.1),
+                self.grid_wkid
+            )
 
+            if not indicator_url:
                 df_current = SpatialDataFrame(
                     columns=field_schema.get(indicator),
                     geometry=[Geometry(json.loads(row[1].SHAPE.JSON))]
                 )
-
                 created = True
 
             else:
@@ -162,21 +202,49 @@ class Indicator:
                     Geometry(row[1].SHAPE).buffer(-.1),
                     self.grid_wkid
                 )
-
-                data_fl = FeatureLayer(
-                    url=self.__getattribute__(indicator + '_url'),
-                    gis=self.gis_conn
-                )
-
                 df_current = data_fl.query(geometry_filter=sp_filter, return_all_records=False).df
 
+            # Set The First Instance
             if idx == 0:
-                out_sdf = df_current
 
+                # Check If Cell Found in Target Indicator Layer
+                if df_current.empty:
+
+                    # Use Grid SDF Row Geom to Insert Empty Record for Target Indicator
+                    data_fl.edit_features(adds=[
+                        {
+                            'attributes': {},
+                            'geometry': json.loads(row[1].SHAPE.JSON)
+                        }
+                    ])
+
+                    # Select Newly Created Cell As Input
+                    out_sdf = data_fl.query(geometry_filter=sp_filter, return_all_records=False).df
+
+                else:
+                    # Use Matched Grid Cell
+                    out_sdf = df_current
+
+            # Append Additional Data
             else:
-                #out_sdf.merge(df_current)
-                out_sdf = out_sdf.merge_datasets(df_current)
-                #out_sdf = out_sdf.append(df_current)
+
+                # Check If Cell Found in Target Indicator Layer
+                if df_current.empty:
+
+                    # Use Grid SDF Row Geom to Insert Empty Record for Target Indicator
+                    data_fl.edit_features(adds=[
+                        {
+                            'attributes': {},
+                            'geometry': json.loads(row[1].SHAPE.JSON)
+                        }
+                    ])
+
+                    # Select Newly Created Cell As Input
+                    out_sdf.merge(data_fl.query(geometry_filter=sp_filter, return_all_records=False).df)
+
+                else:
+                    # Use Matched Grid Cell
+                    out_sdf = out_sdf.merge_datasets(df_current)
 
         self.selected = out_sdf.reset_index(drop=False)
         print("Selected: " + str(len(out_sdf)))
@@ -222,6 +290,8 @@ class Indicator:
                 self.features,
                 p1
             )
+
+            print('DF Records: {}'.format(len(df)))
             if self.debug:
                 df.to_featureclass(self.debug, 'poac', overwrite=True)
                 return df
@@ -334,10 +404,16 @@ class Indicator:
         try:
             new_flag = self.set_selected('them')
 
+            # Determine If Configured GIS Objects Support GeoEnrichment/getSamples
+            validate_geo_gis(self.geo_gis_conn)
+            validate_img_gis(self.geo_gis_conn, self.them_pop)
+
             df = thematic_accuracy(
                 self.selected,
                 self.features,
-                p1
+                p1,
+                self.geo_gis_conn,
+                self.them_pop
             )
 
             if new_flag:
@@ -413,7 +489,7 @@ class Indicator:
             df = logical_consistency(
                 self.selected,
                 self.features,
-                self.feat_url,
+                FeatureLayer(self.feat_url, gis=self.gis_conn),
                 p1,
                 p2,
                 p3,
