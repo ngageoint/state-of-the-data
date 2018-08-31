@@ -466,7 +466,7 @@ def temporal_currency(out_sdf, df_list, f_currency, non_std_date):
     return out_sdf
 
 
-def thematic_accuracy(out_sdf, df_list, f_thm_acc, geo_gis, img_url):
+def thematic_accuracy(out_sdf, df_list, f_thm_acc, them_gis, them_url):
 
     print('Running Thematic Accuracy')
 
@@ -479,33 +479,47 @@ def thematic_accuracy(out_sdf, df_list, f_thm_acc, geo_gis, img_url):
 
         df_current = df_list[idx]
 
+
+        ##-----------------------------------------------------------------------------
+        ## Uses Geoenrichment - Not available outside of AGOL
         # Pull GeoEnrichment Figures
-        enriched = enrich([row[1]['SHAPE']], gis=geo_gis)
-        if 'TOTPOP' not in list(enriched):
-            enriched_pop = -1
-        else:
-            enriched_pop = enriched.TOTPOP[0]
+        # enriched = enrich([row[1]['SHAPE']], gis=geo_gis)
+        # if 'TOTPOP' not in list(enriched):
+        #     enriched_pop = -1
+        # else:
+        #     enriched_pop = enriched.TOTPOP[0]
+        #
+        # # Pull Samples From Configured Population Service
+        # img_lyr = ImageryLayer(img_url, gis=geo_gis)
+        # cells = img_lyr.properties.maxImageHeight * img_lyr.properties.maxImageWidth
+        # samples = img_lyr.get_samples(
+        #     row[1]['SHAPE'],
+        #     geometry_type='esriGeometryPolygon',
+        #     sample_count=cells
+        # )
+        # sample_total = sum([int(sample['value']) for sample in samples])
+        #
+        # # Push Significant Values Into List for Averaging
+        # if enriched_pop or sample_total < 100:
+        #     pass
+        # else:
+        #     diff = abs(enriched_pop - sample_total)
+        #     if diff > 100:
+        #         pop_diff.append(diff)
+        #
+        # tot_pop = enriched_pop if enriched_pop > 0 else sample_total
+        # tot_pop = tot_pop if tot_pop > 0 else -1
 
-        # Pull Samples From Configured Population Service
-        img_lyr = ImageryLayer(img_url, gis=geo_gis)
-        cells = img_lyr.properties.maxImageHeight * img_lyr.properties.maxImageWidth
-        samples = img_lyr.get_samples(
-            row[1]['SHAPE'],
-            geometry_type='esriGeometryPolygon',
-            sample_count=cells
-        )
-        sample_total = sum([int(sample['value']) for sample in samples])
+        ##-----------------------------------------------------------------------------
 
-        # Push Significant Values Into List for Averaging
-        if enriched_pop or sample_total < 100:
-            pass
-        else:
-            diff = abs(enriched_pop - sample_total)
-            if diff > 100:
-                pop_diff.append(diff)
+        them_lyr = FeatureLayer(url=them_url, gis=them_gis)
 
-        tot_pop = enriched_pop if enriched_pop > 0 else sample_total
-        tot_pop = tot_pop if tot_pop > 0 else -1
+        geom = Geometry(row[1].SHAPE)
+
+        sp_filter = filters.intersects(geom, 4326)
+
+        them_sdf = them_lyr.query(geometry_filter=sp_filter, return_all_records=True).df
+
 
         if len(df_current) > 0:
             count = len(df_current)
@@ -558,7 +572,7 @@ def thematic_accuracy(out_sdf, df_list, f_thm_acc, geo_gis, img_url):
             else:
                 m = out_sdf['MEAN'][0]
 
-            SCORE_VALUE = get_equal_breaks_score(m)# get_equal_breaks_score(output_features, ['MEAN','EQUAL']) # PUT SCORE IN EQUAL
+            SCORE_VALUE = them_sdf['grls_score'].loc[0]#get_equal_breaks_score(m)# get_equal_breaks_score(output_features, ['MEAN','EQUAL']) # PUT SCORE IN EQUAL
 
             #GRLS = SCORE_VALUE
             #domScale = common
@@ -593,8 +607,8 @@ def thematic_accuracy(out_sdf, df_list, f_thm_acc, geo_gis, img_url):
             out_sdf.set_value(idx, field_schema.get('them')[24],round(count_1000000*100/count,1))
             out_sdf.set_value(idx, field_schema.get('them')[25],count)
             out_sdf.set_value(idx, field_schema.get('them')[26],str(MSP)) #MISSION_PLANNING FIELD
-            # out_sdf.set_value(idx, field_schema.get('them')[27],SCORE_VALUE)#), # THEMATIC SCALE VALUE
-            out_sdf.set_value(idx, field_schema.get('them')[27], tot_pop)  # ), # THEMATIC SCALE VALUE
+            out_sdf.set_value(idx, field_schema.get('them')[27],SCORE_VALUE)#), # THEMATIC SCALE VALUE
+            #out_sdf.set_value(idx, field_schema.get('them')[27], tot_pop)  # ), # THEMATIC SCALE VALUE
             out_sdf.set_value(idx, field_schema.get('them')[28],population_scale(common, SCORE_VALUE)) # POPULATION_SCALE
             #to 28
 

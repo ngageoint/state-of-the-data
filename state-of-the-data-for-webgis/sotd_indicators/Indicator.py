@@ -35,6 +35,14 @@ class Indicator:
         self.geo_portal   = None
         self.geo_gis_conn = None
 
+        # Thematic GIS
+        self.them_pem      = None
+        self.them_key      = None
+        self.them_username = None
+        self.them_password = None
+        self.them_portal   = None
+        self.them_gis_conn = None
+
         # Selection Drivers
         self.grid_url = None
         self.feat_url = None
@@ -107,6 +115,16 @@ class Indicator:
         else:
             self.geo_gis_conn = None
 
+        # Set GeoEnrichment GIS Object
+        if self.them_password != None and self.them_username != None:
+            self.them_gis_conn = GIS(
+                url=self.them_portal,
+                username=self.them_username,
+                password=self.them_password
+            )
+        else:
+            self.them_gis_conn = None
+
         if self.key != None and self.pem != None:
             import ssl
             ssl._create_default_https_context = ssl._create_unverified_context
@@ -156,7 +174,7 @@ class Indicator:
 
         df_list = []
 
-        for idx, row in enumerate(self.grid_sdf.iterrows()):
+        for idx, row in enumerate(self.grid_sdf.iterrows()):#self.grid_sdf.iterrows()):
 
             geom = Geometry(row[1].SHAPE)
 
@@ -164,6 +182,7 @@ class Indicator:
 
             data_fl = FeatureLayer(url=self.feat_url, gis=self.gis_conn)
 
+            ## Change return all records to True
             df_list.append(
                 data_fl.query(geometry_filter=sp_filter, return_all_records=False).df
             )
@@ -177,7 +196,8 @@ class Indicator:
 
         # Indicator Feature Layer
         indicator_url = self.__getattribute__(indicator + '_url')
-        data_fl = FeatureLayer(url=indicator_url, gis=self.gis_conn)
+        print(indicator_url)
+        #data_fl = FeatureLayer(url=indicator_url, gis=self.gis_conn)
 
         # Enumerate Used to Leverage the Merge Method on the Data Frame.
         # Set the First and Merge the Remainder to the First.
@@ -282,44 +302,47 @@ class Indicator:
 
     def run_poac(self, p1, apply_edits=True):
 
-        try:
-            new_flag = self.set_selected('poac')
+        #try:
 
-            df = positional_accuracy(
-                self.selected,
-                self.features,
-                p1
-            )
+        print("HERERERERRE")
+        new_flag = self.set_selected('poac')
 
-            print('DF Records: {}'.format(len(df)))
-            if self.debug:
-                df.to_featureclass(self.debug, 'poac', overwrite=True)
-                return df
-            if new_flag:
-                print(df.to_featureclass)
+        print("positional_accuracy")
+        df = positional_accuracy(
+            self.selected,
+            self.features,
+            p1
+        )
+
+        print('DF Records: {}'.format(len(df)))
+        if self.debug:
+            df.to_featureclass(self.debug, 'poac', overwrite=True)
+            return df
+        if new_flag:
+            print(df.to_featureclass)
+            return [
+                df,
+                self.create_layer(
+                    df,
+                    'Positional Accuracy {}'.format(round(time.time()))
+                )
+            ]
+
+        else:
+            if apply_edits:
                 return [
                     df,
-                    self.create_layer(
+                    self.update_layer(
                         df,
-                        'Positional Accuracy {}'.format(round(time.time()))
+                        self.poac_url
                     )
                 ]
 
             else:
-                if apply_edits:
-                    return [
-                        df,
-                        self.update_layer(
-                            df,
-                            self.poac_url
-                        )
-                    ]
+                return df
 
-                else:
-                    return df
-
-        except Exception as e:
-            print('Exception Running Positional Accuracy: {}'.format(str(e)))
+        #except Exception as e:
+        #    print('Exception Running Positional Accuracy: {}'.format(str(e)))
 
     def run_cmpl(self, comparison_sdf, apply_edits=True):
 
@@ -405,14 +428,23 @@ class Indicator:
             new_flag = self.set_selected('them')
 
             # Determine If Configured GIS Objects Support GeoEnrichment/getSamples
-            validate_geo_gis(self.geo_gis_conn)
-            validate_img_gis(self.geo_gis_conn, self.them_pop)
+            # This only will work with AGOL accounts
+            #validate_geo_gis(self.geo_gis_conn)
+            #validate_img_gis(self.geo_gis_conn, self.them_pop)
+
+            #df = thematic_accuracy(
+            #    self.selected,
+            #    self.features,
+            #    p1,
+            #    self.geo_gis_conn,
+            #    self.them_pop
+            #)
 
             df = thematic_accuracy(
                 self.selected,
                 self.features,
                 p1,
-                self.geo_gis_conn,
+                self.them_gis_conn,
                 self.them_pop
             )
 
