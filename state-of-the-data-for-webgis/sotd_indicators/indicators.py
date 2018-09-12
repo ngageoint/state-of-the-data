@@ -11,7 +11,9 @@ import pandas as pd
 import numpy as np
 import json
 import sys
+import os
 
+import temporal_accuracy as ta
 
 def positional_accuracy(out_sdf, df_list, val_field):
 
@@ -702,3 +704,39 @@ def source_lineage(out_sdf, df_list, f_value, f_search, search_val):
                 #print(out_sdf)
 
     return out_sdf
+
+
+
+
+def temporal_accuracy(c_features, curr_url, output_workspace, output_features, years, curr_gis):
+
+    import zipfile
+    import arcpy
+
+    fl = FeatureLayer(url=curr_url, gis=curr_gis)
+
+    item = curr_gis.content.get(fl.properties.serviceItemId)
+
+    export_item = item.export(export_format='File Geodatabase', title='CURRENCY')
+
+    result = export_item.download(save_path=output_workspace)
+
+    folder = os.path.dirname(result)
+
+    with zipfile.ZipFile(result, "r") as zip_ref:
+        zip_ref.extractall(folder)
+
+    gdbs = []
+    for file in zip_ref.namelist():
+        gdbs.append(os.path.split(file)[0])
+
+    gdb = os.path.join(folder, most_common(gdbs))
+
+    arcpy.env.workspace = gdb
+    fc = arcpy.ListFeatureClasses()
+
+    feature_class = os.path.join(gdb, fc[0])
+
+    temp_acc_calc = ta.TemporalAccuracy(c_features, feature_class, output_features, years)
+
+    temp_acc_calc.create_temporal_accuracy()

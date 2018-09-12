@@ -1,9 +1,11 @@
 from sotd_indicators.indicators import *
 
 from arcgis.gis import GIS
+from arcgis.geometry import Geometry, filters
 
 import configparser
 import time
+import shutil
 
 
 class Indicator:
@@ -27,14 +29,6 @@ class Indicator:
         self.pub_portal   = None
         self.pub_gis_conn = None
 
-        # GeoEnrichment GIS
-        self.geo_pem      = None
-        self.geo_key      = None
-        self.geo_username = None
-        self.geo_password = None
-        self.geo_portal   = None
-        self.geo_gis_conn = None
-
         # Thematic GIS
         self.them_pem      = None
         self.them_key      = None
@@ -42,6 +36,13 @@ class Indicator:
         self.them_password = None
         self.them_portal   = None
         self.them_gis_conn = None
+
+        # Temporal Acuracy
+        self.years              = None
+        self.c_features         = None
+        self.temp_acc_url       = None
+        self.temp_acc_workspace = None
+        self.temp_acc_features  = None
 
         # Selection Drivers
         self.grid_url = None
@@ -80,6 +81,14 @@ class Indicator:
         # Extra Values
         self.them_pop = None
 
+        #Filter Parameters
+        self.aoi_filter_fc = None
+        self.aoi_filter_url = None
+        self.aoi_username = None
+        self.aoi_password = None
+        self.aoi_portal = None
+
+
     def load_config(self, config_file):
 
         # Read Incoming Config File
@@ -106,14 +115,14 @@ class Indicator:
             self.pub_gis_conn = None
 
         # Set GeoEnrichment GIS Object
-        if self.geo_password != None and self.geo_username != None:
-            self.geo_gis_conn = GIS(
-                url=self.geo_portal,
-                username=self.geo_username,
-                password=self.geo_password
-            )
-        else:
-            self.geo_gis_conn = None
+        # if self.geo_password != None and self.geo_username != None:
+        #     self.geo_gis_conn = GIS(
+        #         url=self.geo_portal,
+        #         username=self.geo_username,
+        #         password=self.geo_password
+        #     )
+        # else:
+        #     self.geo_gis_conn = None
 
         # Set GeoEnrichment GIS Object
         if self.them_password != None and self.them_username != None:
@@ -148,19 +157,49 @@ class Indicator:
 
     def set_grid_sdf(self, lb_days=1000, use_query=False):
 
+
+        if self.aoi_filter_fc:
+
+            self.geometry_filter = False
+        elif self.aoi_filter_url:
+            self.aoi_gis = GIS(self.aoi_portal, self.aoi_username, self.aoi_password)
+
+            fl = FeatureLayer(self.aoi_filter_url, gis=self.aoi_gis)
+            res = fl.query()
+            geom = res.value['features'][0]['geometry']
+            g = Geometry(geom).project_as(res.spatial_reference['wkid'])
+            g_4326 = g.project_as(4326)
+            self.geometry_filter = filters.intersects(g_4326,4326)
+            print("Has Geomery Filter")
+
+            self.geometry_filter = None
+        else:
+            self.geometry_filter = None
+
         if not self.grid_url:
             raise Exception('Grid URL Not Set')
         else:
 
             if use_query:
+                print("HERE")
 
                 dates = get_dates_in_range(lb_days)
 
+                print("HREER 2")
                 grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
+
+                print("HERE 3")
 
                 self.grid_wkid = grid_fl.properties.extent.spatialReference.wkid
 
-                self.grid_sdf = grid_fl.query(where=form_query_string(dates)).df
+                print(self.geometry_filter)
+
+                print("getting grid_sdf")
+                self.grid_sdf = grid_fl.query(
+                    where=form_query_string(dates),
+                    geometry_filter=self.geometry_filter).df
+
+                print(len(self.grid_sdf))
 
             else:
 
@@ -168,7 +207,9 @@ class Indicator:
 
                 self.grid_wkid = grid_fl.properties.extent.spatialReference.wkid
 
-                self.grid_sdf = grid_fl.query(return_all_records=False).df
+                self.grid_sdf = grid_fl.query(
+                    return_all_records=False,
+                    geometry_filter=self.geometry_filter).df
 
     def set_features(self):
 
@@ -552,3 +593,49 @@ class Indicator:
 
         except Exception as e:
             print('Exception Running Source Lineage: {}'.format(str(e)))
+
+
+    def run_temp_acc(self):
+
+        try:
+            #new_flag = self.set_selected('temp_acc')
+
+            years = [int(y) for y in self.years.split(',')]
+
+            temporal_accuracy(
+                self.c_features,
+                self.curr_url,
+                self.temp_acc_workspace,
+                self.temp_acc_features,
+                years,
+                self.pub_gis_conn
+            )
+
+            # zip temp_acc_features
+            zip_name = os.path.dirname(self.temp_acc_features)
+            zipped_gdb = zip_name+".zip"
+            zip_folder(zip_name,
+                       zipped_gdb)
+
+            # Check for existing GDB in Portal
+            temporal_accuracy_gdb = self.pub_gis_conn.content.search(
+                "Temporal Accuracy",
+                item_type="File Geodatabase"
+            )
+
+            if len(temporal_accuracy_gdb) > 0:
+                temporal_accuracy_gdb[0].delete()
+
+            #if new_flag:
+            print("Publishing a new Temporal Accuracy service")
+            gdb = self.pub_gis_conn.content.add({"title": "Temporal Accuracy"}, zipped_gdb)
+            published_service = gdb.publish(overwrite=True)
+            gdb.delete()
+
+            #else:
+            #    print("Overwriting existing Temporal Accuracy service")
+
+            return published_service
+
+        except Exception as e:
+            print('Exception Running Thematic Accuracy: {}'.format(str(e)))
