@@ -17,10 +17,16 @@ The National Geospatial-Intelligence Agency (NGA) desires to maintain a full und
   - Facilitates transparency of GEOINT through discoverability, accessibility and usability
 
 # The Toolbox and Scripts
-## State of the Data Toolbox
+## state-of-the-data-for-webgis
+State of the Data for WebGIS is designed to work with features that have been service enabled as ArcGIS Feature Services. This set of tools uses the [ArcGIS API for Python](https://developers.arcgis.com/python/) to pull data that is served as feature services in a spatial dataframe, perform the state of the data analysis calculations, and output the data as a feature service.
+
+## state-of-the-data-for-desktop
+State of the Data for Desktop is a set of ArcGIS Desktop Geoprocessing tools that can be used from ArcMap or ArcGIS Pro to process the State of the Data metrics for feature classes, feature layers, and shapefiles. There are two separate toolboxes. The **State of the Data.tbx** is intended for creating new State of the Data assessments. The **State of the Data Enterprise.tbx** is intened to work with data that can be updated withing an enterprise geodatabase.
+
+### State of the Data Toolbox
 This toolbox contains all current State of the Data analysis scripts as ArcGIS geoprocessing tools.
 ![](http://nga.maps.arcgis.com/sharing/rest/content/items/b01f07bc755f480ab4052c64484b40fd/data?style=centerme)
-## State of the Data Enterprise Toolbox
+### State of the Data Enterprise Toolbox
 This toolbox is a subset of the tools in the State of the Data toolbox that have been designed to be run with feature services or enterprise geodatabase features and will output existing content suitability indicators. 
 ![](http://nga.maps.arcgis.com/sharing/rest/content/items/40d970a508df481d97d846266ef5f21e/data?style=centerme)
 ## Metrics Explained
