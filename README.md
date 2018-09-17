@@ -83,6 +83,7 @@ In aphabetical orther by last name:
 - Gregory Brunner (gbrunner@esri.com)
 - Andrew Chapkowski (achapkowski@esri.com)
 - Tim Hollingshead (thollingshead@esri.com)
+- Jeff Scarmazzi (jscarmazzi@esri.com)
 - Todd Wever (twever@esri.com)
 
 # Contributing
