@@ -1,1 +1,2 @@
 # state-of-the-data-for-webgis
+State of the Data for WebGIS is designed to work with features that have been service enabled as ArcGIS Feature Services. This set of tools uses the [ArcGIS API for Python](https://developers.arcgis.com/python/) to pull data that is served as feature services in a spatial dataframe, perform the state of the data analysis calculations, and output the data as a feature service.
