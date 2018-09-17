@@ -29,6 +29,9 @@ def form_query_string(date_list):
     query = date_select_field + ' IN ' + dates_to_query
     return query
 
+def get_datetime_string_wo_zeros(s):
+    dts = [dt.strftime('%#m/%#d/%Y') for dt in s]
+    return dts
 
 def get_datetime_string(s):
     dts = [dt.strftime('%Y-%m-%d') for dt in s]
@@ -39,7 +42,7 @@ def get_dates_in_range(look_back_days):
     num_days = look_back_days
     today = datetime.datetime.today()
     date_list = [today - datetime.timedelta(days=x) for x in range(0, num_days)]
-    dates = [d for d in get_datetime_string(date_list)]
+    dates = [d for d in get_datetime_string_wo_zeros(date_list)]
     return dates
 
 

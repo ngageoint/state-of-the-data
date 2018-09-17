@@ -160,19 +160,41 @@ class Indicator:
 
         if self.aoi_filter_fc:
 
-            self.geometry_filter = False
+            import arcpy
+
+            grid_desc = arcpy.Describe(self.aoi_filter_fc)
+            grid_sr = grid_desc.spatialReference
+            grid_extent = grid_desc.extent
+
+            sp_filter = filters.intersects(
+                grid_extent,
+                grid_sr
+            )
+
+            self.geometry_filter = sp_filter
+
         elif self.aoi_filter_url:
-            self.aoi_gis = GIS(self.aoi_portal, self.aoi_username, self.aoi_password)
 
-            fl = FeatureLayer(self.aoi_filter_url, gis=self.aoi_gis)
-            res = fl.query()
-            geom = res.value['features'][0]['geometry']
-            g = Geometry(geom).project_as(res.spatial_reference['wkid'])
-            g_4326 = g.project_as(4326)
-            self.geometry_filter = filters.intersects(g_4326,4326)
-            print("Has Geomery Filter")
+            self.aoi_gis = GIS(
+                self.aoi_portal,
+                self.aoi_username,
+                self.aoi_password
+            )
 
-            self.geometry_filter = None
+            fl = FeatureLayer(
+                self.aoi_filter_url,
+                gis=self.aoi_gis
+            )
+
+            geometry = dict(fl.properties.extent)
+
+            sp_filter = filters.intersects(
+                geometry,
+                geometry['spatialReference']
+            )
+
+            self.geometry_filter = sp_filter
+
         else:
             self.geometry_filter = None
 
@@ -184,32 +206,37 @@ class Indicator:
                 print("HERE")
 
                 dates = get_dates_in_range(lb_days)
+                query_string = form_query_string(dates)
 
                 print("HREER 2")
                 grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
 
                 print("HERE 3")
 
-                self.grid_wkid = grid_fl.properties.extent.spatialReference.wkid
-
                 print(self.geometry_filter)
 
                 print("getting grid_sdf")
-                self.grid_sdf = grid_fl.query(
-                    where=form_query_string(dates),
-                    geometry_filter=self.geometry_filter).df
+                #self.grid_sdf = grid_fl.query(
+                #    where=form_query_string(dates)
+                #).df
+
+                self.grid_sdf = grid_fl.query(where=query_string,geometry_filter=self.geometry_filter).df
 
                 print(len(self.grid_sdf))
 
+                print("Done.")
+
             else:
+
+                print("Using Geometry Filter.")
 
                 grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
 
-                self.grid_wkid = grid_fl.properties.extent.spatialReference.wkid
-
                 self.grid_sdf = grid_fl.query(
-                    return_all_records=False,
+                    return_all_records=True,
                     geometry_filter=self.geometry_filter).df
+
+                print(len(self.grid_sdf))
 
     def set_features(self):
 
