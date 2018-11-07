@@ -516,11 +516,12 @@ def thematic_accuracy(out_sdf, df_list, f_thm_acc, them_gis, them_url):
 
         them_lyr = FeatureLayer(url=them_url, gis=them_gis)
 
-        geom = Geometry(row[1].SHAPE)
+        geom = Geometry(row[1].SHAPE).buffer(-.01)
 
         sp_filter = filters.intersects(geom, 4326)
 
         them_sdf = them_lyr.query(geometry_filter=sp_filter, return_all_records=True).df
+        #print(them_sdf)
 
 
         if len(df_current) > 0:
@@ -531,6 +532,7 @@ def thematic_accuracy(out_sdf, df_list, f_thm_acc, them_gis, them_url):
             min_scale = 100 * (len(df_current[df_current[f_thm_acc] == min_val])/count)
             vc = df_current[f_thm_acc].value_counts()
             common = df_current[f_thm_acc].mode() # Used in MSP
+            mean = df_current[f_thm_acc].mean()
             if len(common) > 0:
                 common = common[0]
                 common_count = vc[common]
@@ -612,6 +614,7 @@ def thematic_accuracy(out_sdf, df_list, f_thm_acc, them_gis, them_url):
             out_sdf.set_value(idx, field_schema.get('them')[27],SCORE_VALUE)#), # THEMATIC SCALE VALUE
             #out_sdf.set_value(idx, field_schema.get('them')[27], tot_pop)  # ), # THEMATIC SCALE VALUE
             out_sdf.set_value(idx, field_schema.get('them')[28],population_scale(common, SCORE_VALUE)) # POPULATION_SCALE
+            out_sdf.set_value(idx, field_schema.get('them')[29],mean)
             #to 28
 
         else:
@@ -622,10 +625,11 @@ def thematic_accuracy(out_sdf, df_list, f_thm_acc, them_gis, them_url):
             out_sdf.set_value(idx, field_schema.get('them')[26],'N/A')
             out_sdf.set_value(idx, field_schema.get('them')[27],'N/A')
             out_sdf.set_value(idx, field_schema.get('them')[28],0)
+            out_sdf.set_value(idx, field_schema.get('them')[29],-1)
 
         del df_current
 
-    print('Average Difference of Population Estimates: {}'.format(np.average(pop_diff)))
+    #print('Average Difference of Population Estimates: {}'.format(np.average(pop_diff)))
 
     return out_sdf
 
@@ -736,6 +740,14 @@ def temporal_accuracy(c_features, curr_url, output_workspace, output_features, y
     fc = arcpy.ListFeatureClasses()
 
     feature_class = os.path.join(gdb, fc[0])
+
+    temp_acc_calc = ta.TemporalAccuracy(c_features, feature_class, output_features, years)
+
+    temp_acc_calc.create_temporal_accuracy()
+
+def temporal_accuracy_from_currency_fc(c_features, curr_features, output_features, years):
+
+    feature_class = curr_features
 
     temp_acc_calc = ta.TemporalAccuracy(c_features, feature_class, output_features, years)
 

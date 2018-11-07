@@ -4,12 +4,14 @@ from arcgis.geoenrichment import enrich
 from arcgis.raster import ImageryLayer
 from arcgis.geometry import Geometry
 from arcgis.gis.server import Server
+from arcgis.features import SpatialDataFrame
 
 from collections import Counter
 import pandas as pd
 import numpy as np
 import datetime
 import arcpy
+from arcpy import da
 import os
 import zipfile
 import sys
@@ -515,3 +517,130 @@ def zip_folder(folder_path, output_path):
         sys.exit(1)
     finally:
         zip_file.close()
+
+# authoritative_fc = r'C:\PROJECTS\STATE_OF_THE_DATA\DATA\AppendInsertTest.gdb\Mongolia_Partial'
+# results_fc = r'C:\PROJECTS\STATE_OF_THE_DATA\DATA\AppendInsertTest.gdb\Mongolia'
+# schema = "poac"
+def update_insert_features(results_fc, authoritative_fc, schema):
+
+    if arcpy.Exists(authoritative_fc):
+
+        results_fl = arcpy.MakeFeatureLayer_management(results_fc, "res_fl")
+        authoritative_fl = arcpy.MakeFeatureLayer_management(authoritative_fc, "auth_fl")
+        overlapping_results_fl = arcpy.MakeFeatureLayer_management(results_fc, "ovrlp_res_fl")
+        new_features_fl = arcpy.MakeFeatureLayer_management(results_fc, "new_res_fl")
+
+        overlp_res_fl = arcpy.SelectLayerByLocation_management(overlapping_results_fl, "HAVE_THEIR_CENTER_IN",
+                                                               authoritative_fl)
+        selected_auth_fl = arcpy.SelectLayerByLocation_management(authoritative_fl,
+                                                                  "HAVE_THEIR_CENTER_IN",
+                                                                  results_fl)
+        new_results_fl = arcpy.SelectLayerByLocation_management(new_features_fl,
+                                                                "HAVE_THEIR_CENTER_IN",
+                                                                authoritative_fl, "#", "#", 'INVERT')
+        res_count = arcpy.GetCount_management(results_fl)[0]
+        auth_count = arcpy.GetCount_management(selected_auth_fl)[0]
+        new_res_count = arcpy.GetCount_management(new_results_fl)[0]
+
+        print(res_count)
+        print(auth_count)
+        print(new_res_count)
+
+        if int(auth_count) > 0:
+            print('There are ' + str(auth_count) + ' Features that need inserting')
+            insert_new_results(selected_auth_fl,overlp_res_fl, authoritative_fc, schema)
+
+        if int(new_res_count) > 0:
+            print('There are ' + str(new_res_count) + ' Features that need inserting')
+            append_new_results(new_results_fl, authoritative_fc)
+
+    else:
+        new_results_fl = arcpy.MakeFeatureLayer_management(results_fc, "new_res_fl")
+        create_new_results(new_results_fl, authoritative_fc)
+
+# Function inserts new results into the authoritative feature class if the
+# feature geometries already exist
+def insert_new_results(selected_auth_fl, selected_res_fl, authoritative_fc, schema):
+    selected_auth_sdf = SpatialDataFrame.from_featureclass(selected_auth_fl)
+    print(len(selected_auth_sdf))
+    selected_res_sdf = SpatialDataFrame.from_featureclass(selected_res_fl)
+    print(len(selected_res_sdf))
+
+    fields = field_schema.get(schema)
+    #for f in fields:
+    #    print(f)
+
+    # Write this function
+    dtypes =  dts.get(schema)
+    fields = field_schema.get(schema)
+
+    for idx, sel_auth_row in enumerate(selected_auth_sdf.iterrows()):
+
+        geom = sel_auth_row[1].SHAPE.buffer(-.01)
+        oid = sel_auth_row[1].OBJECTID
+
+        # print(oid)
+
+        ext = geom.extent
+
+        sq = selected_res_sdf['SHAPE'].disjoint(geom) == False
+        df_current = selected_res_sdf[sq].copy()
+        df_current.reset_index(inplace=True)
+        #print(df_current.head())
+
+        if len(df_current) > 0:
+            # print("Here")
+            #['MEAN_CE90']
+            for f in fields:
+                try:
+                    cur_val = df_current.loc[0].at[f]
+                    #print(cur_val)
+                    selected_auth_sdf.at[idx, f] = cur_val
+                except:
+                    # break
+                    print("Field doesn't exist")
+
+    insert_df = selected_auth_sdf.drop(['SHAPE'], axis=1, inplace=False)
+
+    records = insert_df.to_records(index=False)
+
+    rows = np.array(records, dtype=dtypes)
+
+    array = rows  # np.array(rows, dtypes)
+    da.ExtendTable(authoritative_fc, "OID@", array, "_ID", False)
+
+    return authoritative_fc
+
+# Function appends new results to an existing authoritative feature class
+# if the feature geometries did not already exist
+def append_new_results(new_results_fl, authoritative_fc):
+    new_res_count = arcpy.GetCount_management(new_results_fl)[0]
+
+    print("Appending " + str(new_res_count) + " New Features")
+    arcpy.Append_management(new_results_fl, authoritative_fc, "NO_TEST")
+
+    return authoritative_fc
+
+# Function creates new features if the authoritative features don't already exist
+def create_new_results(new_results_fl, authoritative_fc):
+
+    new_fc = arcpy.CopyFeatures_management(new_results_fl, authoritative_fc)
+
+    return new_fc
+
+def create_temp_gdb(gdb_location, timestamp):
+
+    gdb = os.path.join(gdb_location, 'daliy_'+timestamp+'.gdb')
+    arcpy.CreateFileGDB_management(gdb_location, 'daliy_'+timestamp+'.gdb')
+
+    return gdb
+
+def copy_to_s3(gdb):
+
+    zipped_gdb = gdb + ".zip"
+    zip_folder(gdb, zipped_gdb)
+
+    #Use boto3
+
+    return zipped_gdb
+

@@ -5,6 +5,7 @@ from arcgis.geometry import Geometry, filters
 
 import configparser
 import time
+import datetime
 import shutil
 
 
@@ -13,13 +14,16 @@ class Indicator:
     def __init__(self):
 
         # GIS Resources
-        self.pem      = None
-        self.key      = None
-        self.username = None
-        self.password = None
-        self.portal   = None
-        self.debug    = None
-        self.gis_conn = None
+        self.pem                = None
+        self.key                = None
+        self.username           = None
+        self.password           = None
+        self.portal             = None
+        self.write_to_gdb       = None
+        self.temp_gdb_location  = None
+        self.temp_gdb           = None
+        self.gis_conn           = None
+        self.return_all_records = True #None
 
         # Publishing GIS
         self.pub_pem      = None
@@ -87,6 +91,12 @@ class Indicator:
         self.aoi_username = None
         self.aoi_password = None
         self.aoi_portal = None
+
+        self.timestamp = self.create_datetimestamp()
+
+    def create_datetimestamp(self):
+        timestamp = '{:%Y_%b_%d_%H_%M_%S}'.format(datetime.datetime.now())
+        return timestamp
 
 
     def load_config(self, config_file):
@@ -203,15 +213,15 @@ class Indicator:
         else:
 
             if use_query:
-                print("HERE")
+                #print("HERE")
 
                 dates = get_dates_in_range(lb_days)
                 query_string = form_query_string(dates)
 
-                print("HREER 2")
+                #print("HREER 2")
                 grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
 
-                print("HERE 3")
+                #print("HERE 3")
 
                 print(self.geometry_filter)
 
@@ -233,10 +243,13 @@ class Indicator:
                 grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
 
                 self.grid_sdf = grid_fl.query(
-                    return_all_records=True,
+                    return_all_records=self.return_all_records,
                     geometry_filter=self.geometry_filter).df
 
                 print(len(self.grid_sdf))
+
+        if len(self.grid_sdf)>0:
+            self.temp_gdb = create_temp_gdb(self.temp_gdb_location, self.timestamp)
 
     def set_features(self):
 
@@ -246,13 +259,16 @@ class Indicator:
 
             geom = Geometry(row[1].SHAPE)
 
+            print(idx)
+
             sp_filter = filters.intersects(geom, self.grid_wkid)
 
             data_fl = FeatureLayer(url=self.feat_url, gis=self.gis_conn)
 
             ## Change return all records to True
             df_list.append(
-                data_fl.query(geometry_filter=sp_filter, return_all_records=False).df
+                data_fl.query(geometry_filter=sp_filter,
+                              return_all_records=self.return_all_records).df
             )
 
         self.features = df_list
@@ -290,7 +306,8 @@ class Indicator:
                     Geometry(row[1].SHAPE).buffer(-.1),
                     self.grid_wkid
                 )
-                df_current = data_fl.query(geometry_filter=sp_filter, return_all_records=False).df
+                df_current = data_fl.query(geometry_filter=sp_filter,
+                                           return_all_records=self.return_all_records).df
 
             # Set The First Instance
             if idx == 0:
@@ -307,7 +324,8 @@ class Indicator:
                     ])
 
                     # Select Newly Created Cell As Input
-                    out_sdf = data_fl.query(geometry_filter=sp_filter, return_all_records=False).df
+                    out_sdf = data_fl.query(geometry_filter=sp_filter,
+                                            return_all_records=self.return_all_records).df
 
                 else:
                     # Use Matched Grid Cell
@@ -328,7 +346,8 @@ class Indicator:
                     ])
 
                     # Select Newly Created Cell As Input
-                    out_sdf.merge(data_fl.query(geometry_filter=sp_filter, return_all_records=False).df)
+                    out_sdf.merge(data_fl.query(geometry_filter=sp_filter,
+                                                return_all_records=self.return_all_records).df)
 
                 else:
                     # Use Matched Grid Cell
@@ -368,26 +387,33 @@ class Indicator:
         else:
             return res['updateResults']
 
+
     def run_poac(self, p1, apply_edits=True):
 
         #try:
 
-        print("HERERERERRE")
-        new_flag = self.set_selected('poac')
+        self.set_selected('poac')
+        new_flag = False#self.set_selected('poac')
 
+        #print(p1)
         print("positional_accuracy")
         df = positional_accuracy(
             self.selected,
             self.features,
             p1
-        )
+        ).drop(['index'], axis=1, inplace=False)
 
         print('DF Records: {}'.format(len(df)))
-        if self.debug:
-            df.to_featureclass(self.debug, 'poac', overwrite=True)
+        if self.write_to_gdb:
+            df.to_featureclass(self.temp_gdb, 'poac_' + self.timestamp, overwrite=True)
+            update_insert_features(
+                os.path.join(self.temp_gdb, 'poac_' + self.timestamp),
+                os.path.join(self.write_to_gdb, 'poac '),
+                'poac'
+            )
             return df
         if new_flag:
-            print(df.to_featureclass)
+            #print(df.to_featureclass)
             return [
                 df,
                 self.create_layer(
@@ -415,15 +441,22 @@ class Indicator:
     def run_cmpl(self, comparison_sdf, apply_edits=True):
 
         try:
-            new_flag = self.set_selected('cmpl')
+            self.set_selected('cmpl')
+            new_flag = False#self.set_selected('cmpl')
 
             df = completeness(
                 self.selected,
                 self.features,
                 comparison_sdf
-            )
-            if self.debug:
-                df.to_featureclass(self.debug, 'cmpl', overwrite=True)
+            ).drop(['index'], axis=1, inplace=False)
+
+            if self.write_to_gdb:
+                df.to_featureclass(self.temp_gdb, 'cmpl_' + self.timestamp, overwrite=True)
+                update_insert_features(
+                    os.path.join(self.temp_gdb, 'cmpl_' + self.timestamp),
+                    os.path.join(self.write_to_gdb, 'cmpl'),
+                    'cmpl'
+                )
                 return df
             if new_flag:
                 return [
@@ -453,19 +486,26 @@ class Indicator:
     def run_curr(self, p1, date='1901-1-1', apply_edits=True):
 
         try:
-            new_flag = self.set_selected('curr')
+            self.set_selected('curr')
+            new_flag = False#self.set_selected('curr')
 
             df = temporal_currency(
                 self.selected,
                 self.features,
                 p1,
                 date
-            )
-            if self.debug:
-                df.to_featureclass(self.debug, 'curr', overwrite=True)
+            ).drop(['index'], axis=1, inplace=False)
+
+            if self.write_to_gdb:
+                df.to_featureclass(self.temp_gdb, 'curr_' + self.timestamp, overwrite=True)
+                update_insert_features(
+                    os.path.join(self.temp_gdb, 'curr_' + self.timestamp),
+                    os.path.join(self.write_to_gdb, 'curr'),
+                    'curr'
+                )
                 return df
             if new_flag:
-                print(df)
+                #print(df)
                 return [
                     df,
                     self.create_layer(
@@ -490,61 +530,72 @@ class Indicator:
         except Exception as e:
             print('Exception Running Temporal Currency: {}'.format(str(e)))
 
-    def run_them(self, p1, apply_edits=True):
+    def run_them(self, p1, apply_edits=False):
 
-        try:
-            new_flag = self.set_selected('them')
+        #try:
+        self.set_selected('them')
+        new_flag = False#self.set_selected('them')
 
-            # Determine If Configured GIS Objects Support GeoEnrichment/getSamples
-            # This only will work with AGOL accounts
-            #validate_geo_gis(self.geo_gis_conn)
-            #validate_img_gis(self.geo_gis_conn, self.them_pop)
+        # Determine If Configured GIS Objects Support GeoEnrichment/getSamples
+        # This only will work with AGOL accounts
+        #validate_geo_gis(self.geo_gis_conn)
+        #validate_img_gis(self.geo_gis_conn, self.them_pop)
 
-            #df = thematic_accuracy(
-            #    self.selected,
-            #    self.features,
-            #    p1,
-            #    self.geo_gis_conn,
-            #    self.them_pop
-            #)
+        #df = thematic_accuracy(
+        #    self.selected,
+        #    self.features,
+        #    p1,
+        #    self.geo_gis_conn,
+        #    self.them_pop
+        #)
 
-            df = thematic_accuracy(
-                self.selected,
-                self.features,
-                p1,
-                self.them_gis_conn,
-                self.them_pop
+        df = thematic_accuracy(
+            self.selected,
+            self.features,
+            p1,
+            self.them_gis_conn,
+            self.them_pop
+        ).drop(['index'], axis=1, inplace=False)
+
+        if self.write_to_gdb:
+            df.to_featureclass(self.temp_gdb, 'them_' + self.timestamp, overwrite=True)
+            update_insert_features(
+                os.path.join(self.temp_gdb, 'them_' + self.timestamp),
+                os.path.join(self.write_to_gdb, 'them'),
+                'them'
             )
+            return df
 
-            if new_flag:
+        if new_flag:
+            return [
+                df,
+                self.create_layer(
+                    df,
+                    'Thematic Accuracy {}'.format(round(time.time()))
+                )
+            ]
+
+        else:
+            if apply_edits:
                 return [
                     df,
-                    self.create_layer(
+                    self.update_layer(
                         df,
-                        'Thematic Accuracy {}'.format(round(time.time()))
+                        self.them_url
                     )
                 ]
 
             else:
-                if apply_edits:
-                    return [
-                        df,
-                        self.update_layer(
-                            df,
-                            self.them_url
-                        )
-                    ]
+                return df
 
-                else:
-                    return df
-
-        except Exception as e:
-            print('Exception Running Thematic Accuracy: {}'.format(str(e)))
+        #except Exception as e:
+        #    print('Exception Running Thematic Accuracy: {}'.format(str(e)))
 
     def run_srln(self, p1, p2=None, search_value=1001, apply_edits=True):
 
         try:
-            new_flag = self.set_selected('srln')
+            self.set_selected('srln')
+            new_flag = False#self.set_selected('srln')
 
             df = source_lineage(
                 self.selected,
@@ -552,9 +603,15 @@ class Indicator:
                 p1,
                 p2,
                 search_value
-            )
-            if self.debug:
-                df.to_featureclass(self.debug, 'srln', overwrite=True)
+            ).drop(['index'], axis=1, inplace=False)
+
+            if self.write_to_gdb:
+                df.to_featureclass(self.temp_gdb, 'srln_' + self.timestamp, overwrite=True)
+                update_insert_features(
+                    os.path.join(self.temp_gdb, 'srln_' + self.timestamp),
+                    os.path.join(self.write_to_gdb, 'srln'),
+                    'srln'
+                )
                 return df
             if new_flag:
                 return [
@@ -584,7 +641,8 @@ class Indicator:
     def run_logc(self, p1, p2, p3, p4, apply_edits=True):
 
         try:
-            new_flag = self.set_selected('logc')
+            self.set_selected('logc')
+            new_flag = False#self.set_selected('logc')
 
             df = logical_consistency(
                 self.selected,
@@ -594,7 +652,16 @@ class Indicator:
                 p2,
                 p3,
                 p4
-            )
+            ).drop(['index'], axis=1, inplace=False)
+
+            if self.write_to_gdb:
+                df.to_featureclass(self.temp_gdb, 'logc_' + self.timestamp, overwrite=True)
+                update_insert_features(
+                    os.path.join(self.temp_gdb, 'logc_' + self.timestamp),
+                    os.path.join(self.write_to_gdb, 'logc'),
+                    'logc'
+                )
+                return df
 
             if new_flag:
                 return [
@@ -622,45 +689,61 @@ class Indicator:
             print('Exception Running Source Lineage: {}'.format(str(e)))
 
 
-    def run_temp_acc(self):
+    def run_temp_acc(self, apply_edits=True):
 
         try:
             #new_flag = self.set_selected('temp_acc')
 
             years = [int(y) for y in self.years.split(',')]
 
-            temporal_accuracy(
-                self.c_features,
-                self.curr_url,
-                self.temp_acc_workspace,
-                self.temp_acc_features,
-                years,
-                self.pub_gis_conn
+            ## If features are online
+            # temporal_accuracy(
+            #     self.c_features,
+            #     self.curr_url,
+            #     self.temp_acc_workspace,
+            #     self.temp_acc_features + "_" + self.timestamp,
+            #     years,
+            #     self.pub_gis_conn
+            # )
+
+            #If pulling features from GDB
+            temporal_accuracy_from_currency_fc(
+                c_features = self.c_features,
+                curr_features = os.path.join(self.temp_gdb, 'curr_' + self.timestamp),
+                output_features = self.temp_acc_features + "_" + self.timestamp,
+                years = years
+            ).drop(['index'], axis=1, inplace=False)
+
+            update_insert_features(
+                os.path.join(self.temp_gdb, 'curr_' + self.timestamp),
+                os.path.join(self.write_to_gdb, 'curr'),
+                'curr'
             )
 
             # zip temp_acc_features
-            zip_name = os.path.dirname(self.temp_acc_features)
-            zipped_gdb = zip_name+".zip"
+            zip_name = os.path.dirname(self.temp_acc_features + "_" + self.timestamp)
+            zipped_gdb = zip_name + ".zip"
             zip_folder(zip_name,
                        zipped_gdb)
 
             # Check for existing GDB in Portal
-            temporal_accuracy_gdb = self.pub_gis_conn.content.search(
-                "Temporal Accuracy",
-                item_type="File Geodatabase"
-            )
+            if apply_edits:
+                temporal_accuracy_gdb = self.pub_gis_conn.content.search(
+                    "Temporal Accuracy",
+                    item_type="File Geodatabase"
+                )
 
-            if len(temporal_accuracy_gdb) > 0:
-                temporal_accuracy_gdb[0].delete()
+                if len(temporal_accuracy_gdb) > 0:
+                    temporal_accuracy_gdb[0].delete()
 
-            #if new_flag:
-            print("Publishing a new Temporal Accuracy service")
-            gdb = self.pub_gis_conn.content.add({"title": "Temporal Accuracy"}, zipped_gdb)
-            published_service = gdb.publish(overwrite=True)
-            gdb.delete()
+                #if new_flag:
+                print("Publishing a new Temporal Accuracy service")
+                gdb = self.pub_gis_conn.content.add({"title": "Temporal Accuracy"}, zipped_gdb)
+                published_service = gdb.publish(overwrite=True)
+                gdb.delete()
 
-            #else:
-            #    print("Overwriting existing Temporal Accuracy service")
+                    #else:
+                    #    print("Overwriting existing Temporal Accuracy service")
 
             return published_service
 
