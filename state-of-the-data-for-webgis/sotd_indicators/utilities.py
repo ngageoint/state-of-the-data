@@ -624,9 +624,19 @@ def append_new_results(new_results_fl, authoritative_fc):
 # Function creates new features if the authoritative features don't already exist
 def create_new_results(new_results_fl, authoritative_fc):
 
+    gdb = create_new_gdb(os.path.dirname(authoritative_fc))
     new_fc = arcpy.CopyFeatures_management(new_results_fl, authoritative_fc)
 
     return new_fc
+
+def create_new_gdb(gdb):
+
+    if arcpy.Exists(gdb) == False:
+        gdb_name = os.path.basename(gdb)
+        gdb_path = os.path.dirname(gdb)
+        arcpy.CreateFileGDB_management(gdb_path, gdb_name)
+
+    return gdb
 
 def create_temp_gdb(gdb_location, timestamp):
 

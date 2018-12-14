@@ -8,6 +8,8 @@ import time
 import datetime
 import shutil
 
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 class Indicator:
 
@@ -23,7 +25,7 @@ class Indicator:
         self.temp_gdb_location  = None
         self.temp_gdb           = None
         self.gis_conn           = None
-        self.return_all_records = True #None
+        self.return_all_records = False #True #None
 
         # Publishing GIS
         self.pub_pem      = None
@@ -51,6 +53,7 @@ class Indicator:
         # Selection Drivers
         self.grid_url = None
         self.feat_url = None
+        self.lb_days  = None
 
         # Positional Accuracy
         self.poac_sdf = None
@@ -91,6 +94,8 @@ class Indicator:
         self.aoi_username = None
         self.aoi_password = None
         self.aoi_portal = None
+        self.aoi_key = None
+        self.aoi_pem = None
 
         self.timestamp = self.create_datetimestamp()
 
@@ -114,39 +119,28 @@ class Indicator:
 
     def set_gis(self):
 
-        # Set Publication GIS Object
-        if self.pub_password != None and self.pub_username != None:
-            self.pub_gis_conn = GIS(
-                url=self.pub_portal,
-                username=self.pub_username,
-                password=self.pub_password
+        # Set GeoEnrichment GIS Object
+        if self.them_key != None and self.them_pem != None:
+
+            self.them_gis_conn = GIS(
+                url=self.them_portal,
+                key_file=self.them_key,
+                cert_file=self.them_pem,
+                verify_cert=False
             )
-        else:
-            self.pub_gis_conn = None
 
-        # Set GeoEnrichment GIS Object
-        # if self.geo_password != None and self.geo_username != None:
-        #     self.geo_gis_conn = GIS(
-        #         url=self.geo_portal,
-        #         username=self.geo_username,
-        #         password=self.geo_password
-        #     )
-        # else:
-        #     self.geo_gis_conn = None
-
-        # Set GeoEnrichment GIS Object
-        if self.them_password != None and self.them_username != None:
+        elif self.them_password != None and self.them_username != None:
             self.them_gis_conn = GIS(
                 url=self.them_portal,
                 username=self.them_username,
                 password=self.them_password
             )
+
         else:
-            self.them_gis_conn = None
+            self.them_gis_conn = GIS()
 
         if self.key != None and self.pem != None:
-            import ssl
-            ssl._create_default_https_context = ssl._create_unverified_context
+
             self.gis_conn = GIS(
                 url=self.portal,
                 key_file=self.key,
@@ -155,17 +149,40 @@ class Indicator:
             )
 
         elif self.username != None and self.password != None:
+
             self.gis_conn = GIS(
                 url=self.portal,
                 username=self.username,
                 password=self.password,
-                verify_cert=False
             )
 
         else:
             self.gis_conn = GIS()
 
-    def set_grid_sdf(self, lb_days=1000, use_query=False):
+        # Setting Publication GIS
+        if self.pub_key != None and self.pub_pem != None:
+
+            self.pub_gis_conn = GIS(
+                url=self.pub_portal,
+                key_file=self.pub_key,
+                cert_file=self.pub_pem,
+                verify_cert=False
+            )
+        elif self.pub_username != None and self.pub_password != None:
+
+            self.pub_gis_conn = GIS(
+                url=self.pub_portal,
+                username=self.pub_username,
+                password=self.pub_password,
+                verify_cert=False
+            )
+
+        else:
+            self.pub_gis_conn = GIS()
+
+
+
+    def set_grid_sdf(self, use_sp_query=False):
 
 
         if self.aoi_filter_fc:
@@ -185,11 +202,22 @@ class Indicator:
 
         elif self.aoi_filter_url:
 
-            self.aoi_gis = GIS(
-                self.aoi_portal,
-                self.aoi_username,
-                self.aoi_password
-            )
+            if self.aoi_key != None and self.aoi_pem != None:
+                self.aoi_gis = GIS(
+                    url=self.aoi_portal,
+                    key_file=self.aoi_key,
+                    cert_file=self.aoi_pem,
+                    verify_cert=False
+                )
+            elif self.aoi_username != None and self.aoi_password != None:
+                self.aoi_gis = GIS(
+                    self.aoi_portal,
+                    self.aoi_username,
+                    self.aoi_password
+                )
+            else:
+                self.aoi_gis = GIS()
+
 
             fl = FeatureLayer(
                 self.aoi_filter_url,
@@ -212,29 +240,37 @@ class Indicator:
             raise Exception('Grid URL Not Set')
         else:
 
-            if use_query:
-                #print("HERE")
+            if use_sp_query:
 
-                dates = get_dates_in_range(lb_days)
+                dates = get_dates_in_range(int(self.lb_days))
                 query_string = form_query_string(dates)
 
-                #print("HREER 2")
                 grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
-
-                #print("HERE 3")
 
                 print(self.geometry_filter)
 
                 print("getting grid_sdf")
-                #self.grid_sdf = grid_fl.query(
-                #    where=form_query_string(dates)
-                #).df
 
-                self.grid_sdf = grid_fl.query(where=query_string,geometry_filter=self.geometry_filter).df
+                # Potential Bug in 1.4.1 and previous where the query needs to be executed more than once
+                # for it to start working
+                try:
+                    print("Running Query - First Attempt")
+                    self.grid_sdf = grid_fl.query(
+                        where=query_string,
+                        geometry_filter=self.geometry_filter,
+                        return_all_records=self.return_all_records,
+                    ).df
+                except:
+                    print("Running Query - Second Attempt")
+                    self.grid_sdf = grid_fl.query(
+                        where=query_string,
+                        geometry_filter=self.geometry_filter,
+                        return_all_records=self.return_all_records,
+                    ).df
 
                 print(len(self.grid_sdf))
 
-                print("Done.")
+                print("Done Querying for Records to Update.")
 
             else:
 
@@ -242,11 +278,20 @@ class Indicator:
 
                 grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
 
-                self.grid_sdf = grid_fl.query(
-                    return_all_records=self.return_all_records,
-                    geometry_filter=self.geometry_filter).df
+                try:
+                    print("Running Query - First Attempt")
+                    self.grid_sdf = grid_fl.query(
+                        return_all_records=self.return_all_records,
+                    ).df
+                except:
+                    print("Running Query - Second Attempt")
+                    self.grid_sdf = grid_fl.query(
+                        return_all_records=self.return_all_records,
+                    ).df
 
                 print(len(self.grid_sdf))
+
+                print("Done Querying for Records to Update.")
 
         if len(self.grid_sdf)>0:
             self.temp_gdb = create_temp_gdb(self.temp_gdb_location, self.timestamp)
@@ -536,19 +581,6 @@ class Indicator:
         self.set_selected('them')
         new_flag = False#self.set_selected('them')
 
-        # Determine If Configured GIS Objects Support GeoEnrichment/getSamples
-        # This only will work with AGOL accounts
-        #validate_geo_gis(self.geo_gis_conn)
-        #validate_img_gis(self.geo_gis_conn, self.them_pop)
-
-        #df = thematic_accuracy(
-        #    self.selected,
-        #    self.features,
-        #    p1,
-        #    self.geo_gis_conn,
-        #    self.them_pop
-        #)
-
         df = thematic_accuracy(
             self.selected,
             self.features,
@@ -707,21 +739,22 @@ class Indicator:
             # )
 
             #If pulling features from GDB
+            self.temp_acc_features = os.path.join(self.temp_gdb, 'temp_acc' + "_" + self.timestamp)
             temporal_accuracy_from_currency_fc(
                 c_features = self.c_features,
                 curr_features = os.path.join(self.temp_gdb, 'curr_' + self.timestamp),
-                output_features = self.temp_acc_features + "_" + self.timestamp,
+                output_features = self.temp_acc_features,
                 years = years
-            ).drop(['index'], axis=1, inplace=False)
+            )#.drop(['index'], axis=1, inplace=False)
 
             update_insert_features(
-                os.path.join(self.temp_gdb, 'curr_' + self.timestamp),
-                os.path.join(self.write_to_gdb, 'curr'),
+                self.temp_acc_features,
+                os.path.join(self.write_to_gdb, 'temp_acc'),
                 'curr'
             )
 
             # zip temp_acc_features
-            zip_name = os.path.dirname(self.temp_acc_features + "_" + self.timestamp)
+            zip_name = os.path.dirname(self.temp_acc_features)
             zipped_gdb = zip_name + ".zip"
             zip_folder(zip_name,
                        zipped_gdb)
@@ -742,10 +775,7 @@ class Indicator:
                 published_service = gdb.publish(overwrite=True)
                 gdb.delete()
 
-                    #else:
-                    #    print("Overwriting existing Temporal Accuracy service")
-
             return published_service
 
         except Exception as e:
-            print('Exception Running Thematic Accuracy: {}'.format(str(e)))
+            print('Exception Running Temporal Accuracy: {}'.format(str(e)))
