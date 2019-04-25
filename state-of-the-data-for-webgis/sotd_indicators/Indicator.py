@@ -25,7 +25,8 @@ class Indicator:
         self.temp_gdb_location  = None
         self.temp_gdb           = None
         self.gis_conn           = None
-        self.return_all_records = False #True #None
+        self.return_all_records = True #None
+        self.fc_prefix          = None
 
         # Publishing GIS
         self.pub_pem      = None
@@ -240,10 +241,11 @@ class Indicator:
             raise Exception('Grid URL Not Set')
         else:
 
-            if use_sp_query:
+            dates = get_dates_in_range(int(self.lb_days))
+            query_string = form_query_string(dates)
+            print(query_string)
 
-                dates = get_dates_in_range(int(self.lb_days))
-                query_string = form_query_string(dates)
+            if use_sp_query:
 
                 grid_fl = FeatureLayer(url=self.grid_url, gis=self.gis_conn)
 
@@ -255,18 +257,33 @@ class Indicator:
                 # for it to start working
                 try:
                     print("Running Query - First Attempt")
-                    self.grid_sdf = grid_fl.query(
-                        where=query_string,
-                        geometry_filter=self.geometry_filter,
-                        return_all_records=self.return_all_records,
-                    ).df
+                    if int(self.lb_days) <= 1000:
+                        self.grid_sdf = grid_fl.query(
+                            where=query_string,
+                            geometry_filter=self.geometry_filter,
+                            return_all_records= self.return_all_records,
+                        ).df #self.return_all_records,
+                    else:
+                        print("Getting all features")
+                        self.grid_sdf = grid_fl.query(
+                            geometry_filter=self.geometry_filter,
+                            return_all_records= self.return_all_records,
+                        ).df #self.return_all_records,
+
                 except:
                     print("Running Query - Second Attempt")
-                    self.grid_sdf = grid_fl.query(
-                        where=query_string,
-                        geometry_filter=self.geometry_filter,
-                        return_all_records=self.return_all_records,
-                    ).df
+                    if int(self.lb_days) <= 1000:
+                        self.grid_sdf = grid_fl.query(
+                            where=query_string,
+                            geometry_filter=self.geometry_filter,
+                            return_all_records=self.return_all_records,
+                        ).df
+                    else:
+                        print("Getting all features")
+                        self.grid_sdf = grid_fl.query(
+                            geometry_filter=self.geometry_filter,
+                            return_all_records= self.return_all_records,
+                        ).df #self.return_all_records,
 
                 print(len(self.grid_sdf))
 
@@ -280,14 +297,28 @@ class Indicator:
 
                 try:
                     print("Running Query - First Attempt")
-                    self.grid_sdf = grid_fl.query(
-                        return_all_records=self.return_all_records,
-                    ).df
+                    if int(self.lb_days) <= 1000:
+                        self.grid_sdf = grid_fl.query(
+                            where=query_string,
+                            return_all_records=self.return_all_records,
+                        ).df
+                    else:
+                        print("Getting all features")
+                        self.grid_sdf = grid_fl.query(
+                            return_all_records=self.return_all_records,
+                        ).df
                 except:
                     print("Running Query - Second Attempt")
-                    self.grid_sdf = grid_fl.query(
-                        return_all_records=self.return_all_records,
-                    ).df
+                    if int(self.lb_days) <= 1000:
+                        self.grid_sdf = grid_fl.query(
+                            where=query_string,
+                            return_all_records=self.return_all_records,
+                        ).df
+                    else:
+                        print("Getting all features")
+                        self.grid_sdf = grid_fl.query(
+                            return_all_records=self.return_all_records,
+                        ).df
 
                 print(len(self.grid_sdf))
 
@@ -450,10 +481,10 @@ class Indicator:
 
         print('DF Records: {}'.format(len(df)))
         if self.write_to_gdb:
-            df.to_featureclass(self.temp_gdb, 'poac_' + self.timestamp, overwrite=True)
+            df.to_featureclass(self.temp_gdb, self.fc_prefix + 'poac_' + self.timestamp, overwrite=True)
             update_insert_features(
-                os.path.join(self.temp_gdb, 'poac_' + self.timestamp),
-                os.path.join(self.write_to_gdb, 'poac '),
+                os.path.join(self.temp_gdb, self.fc_prefix + 'poac_' + self.timestamp),
+                os.path.join(self.write_to_gdb, self.fc_prefix + 'poac '),
                 'poac'
             )
             return df
@@ -542,10 +573,10 @@ class Indicator:
             ).drop(['index'], axis=1, inplace=False)
 
             if self.write_to_gdb:
-                df.to_featureclass(self.temp_gdb, 'curr_' + self.timestamp, overwrite=True)
+                df.to_featureclass(self.temp_gdb, self.fc_prefix + 'curr_' + self.timestamp, overwrite=True)
                 update_insert_features(
-                    os.path.join(self.temp_gdb, 'curr_' + self.timestamp),
-                    os.path.join(self.write_to_gdb, 'curr'),
+                    os.path.join(self.temp_gdb, self.fc_prefix + 'curr_' + self.timestamp),
+                    os.path.join(self.write_to_gdb, self.fc_prefix + 'curr'),
                     'curr'
                 )
                 return df
@@ -590,10 +621,10 @@ class Indicator:
         ).drop(['index'], axis=1, inplace=False)
 
         if self.write_to_gdb:
-            df.to_featureclass(self.temp_gdb, 'them_' + self.timestamp, overwrite=True)
+            df.to_featureclass(self.temp_gdb, self.fc_prefix + 'them_' + self.timestamp, overwrite=True)
             update_insert_features(
-                os.path.join(self.temp_gdb, 'them_' + self.timestamp),
-                os.path.join(self.write_to_gdb, 'them'),
+                os.path.join(self.temp_gdb, self.fc_prefix + 'them_' + self.timestamp),
+                os.path.join(self.write_to_gdb, self.fc_prefix + 'them'),
                 'them'
             )
             return df
@@ -638,10 +669,10 @@ class Indicator:
             ).drop(['index'], axis=1, inplace=False)
 
             if self.write_to_gdb:
-                df.to_featureclass(self.temp_gdb, 'srln_' + self.timestamp, overwrite=True)
+                df.to_featureclass(self.temp_gdb, self.fc_prefix + 'srln_' + self.timestamp, overwrite=True)
                 update_insert_features(
-                    os.path.join(self.temp_gdb, 'srln_' + self.timestamp),
-                    os.path.join(self.write_to_gdb, 'srln'),
+                    os.path.join(self.temp_gdb, self.fc_prefix + 'srln_' + self.timestamp),
+                    os.path.join(self.write_to_gdb, self.fc_prefix + 'srln'),
                     'srln'
                 )
                 return df
@@ -672,53 +703,53 @@ class Indicator:
 
     def run_logc(self, p1, p2, p3, p4, apply_edits=True):
 
-        try:
-            self.set_selected('logc')
-            new_flag = False#self.set_selected('logc')
+        #try:
+        self.set_selected('logc')
+        new_flag = False#self.set_selected('logc')
 
-            df = logical_consistency(
-                self.selected,
-                self.features,
-                FeatureLayer(self.feat_url, gis=self.gis_conn),
-                p1,
-                p2,
-                p3,
-                p4
-            ).drop(['index'], axis=1, inplace=False)
+        df = logical_consistency(
+            self.selected,
+            self.features,
+            FeatureLayer(self.feat_url, gis=self.gis_conn),
+            p1,
+            p2,
+            p3,
+            p4
+        ).drop(['index'], axis=1, inplace=False)
+        print(df.head())
+        if self.write_to_gdb:
+            df.to_featureclass(self.temp_gdb, self.fc_prefix + 'logc_' + self.timestamp, overwrite=True)
+            update_insert_features(
+                os.path.join(self.temp_gdb, self.fc_prefix + 'logc_' + self.timestamp),
+                os.path.join(self.write_to_gdb, self.fc_prefix + 'logc'),
+                'logc'
+            )
+            return df
 
-            if self.write_to_gdb:
-                df.to_featureclass(self.temp_gdb, 'logc_' + self.timestamp, overwrite=True)
-                update_insert_features(
-                    os.path.join(self.temp_gdb, 'logc_' + self.timestamp),
-                    os.path.join(self.write_to_gdb, 'logc'),
-                    'logc'
+        if new_flag:
+            return [
+                df,
+                self.create_layer(
+                    df,
+                    'Logical Consistency {}'.format(round(time.time()))
                 )
-                return df
+            ]
 
-            if new_flag:
+        else:
+            if apply_edits:
                 return [
                     df,
-                    self.create_layer(
+                    self.update_layer(
                         df,
-                        'Logical Consistency {}'.format(round(time.time()))
+                        self.logc_url
                     )
                 ]
 
             else:
-                if apply_edits:
-                    return [
-                        df,
-                        self.update_layer(
-                            df,
-                            self.logc_url
-                        )
-                    ]
+                return df
 
-                else:
-                    return df
-
-        except Exception as e:
-            print('Exception Running Source Lineage: {}'.format(str(e)))
+        #except Exception as e:
+        #    print('Exception Running Logical Consistency: {}'.format(str(e)))
 
 
     def run_temp_acc(self, apply_edits=True):
@@ -739,22 +770,22 @@ class Indicator:
             # )
 
             #If pulling features from GDB
-            self.temp_acc_features = os.path.join(self.temp_gdb, 'temp_acc' + "_" + self.timestamp)
+            daily_temp_acc_features = os.path.join(self.temp_gdb, self.fc_prefix + 'temp_acc' + "_" + self.timestamp)
             temporal_accuracy_from_currency_fc(
                 c_features = self.c_features,
-                curr_features = os.path.join(self.temp_gdb, 'curr_' + self.timestamp),
-                output_features = self.temp_acc_features,
+                curr_features = os.path.join(self.temp_gdb, self.fc_prefix + 'curr_' + self.timestamp),
+                output_features = daily_temp_acc_features,
                 years = years
             )#.drop(['index'], axis=1, inplace=False)
 
             update_insert_features(
+                daily_temp_acc_features,
                 self.temp_acc_features,
-                os.path.join(self.write_to_gdb, 'temp_acc'),
-                'curr'
+                'temp_acc'
             )
 
             # zip temp_acc_features
-            zip_name = os.path.dirname(self.temp_acc_features)
+            zip_name = os.path.dirname(daily_temp_acc_features)
             zipped_gdb = zip_name + ".zip"
             zip_folder(zip_name,
                        zipped_gdb)

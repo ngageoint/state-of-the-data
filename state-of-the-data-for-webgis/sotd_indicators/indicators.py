@@ -261,79 +261,104 @@ def logical_consistency(out_sdf, df_list, feat_lyr, err_cnt, err_def, attr_key, 
     for idx, row in enumerate(out_sdf.iterrows()):
 
         data_sdf = df_list[idx]
+        print(idx)
+        print(data_sdf.head())
 
-        stList = set(data_sdf['f_code'].values)
+        if data_sdf.shape[0] > 0:
 
-        temp_result_df = pd.DataFrame(columns = TMP_FIELDS)#, dtypes=DTYPES)
+            stList = set(data_sdf['f_code'].values)
 
-        geoms=[]
-        for idx_attr, row in data_sdf.iterrows():
+            temp_result_df = pd.DataFrame(columns = TMP_FIELDS)#, dtypes=DTYPES)
 
-            if row['f_code'] in stList:
+            geoms=[]
 
-                if row['f_code'] in specificAttributeDict:
+            for idx_attr, row in data_sdf.iterrows():
 
-                    vals = []
-                    for i in specificAttributeDict[row['f_code']]:
-                        vals.append(i)
+                if row['f_code'] in stList:
 
-                    line = row['SHAPE']
-                    def_count = len(vals)
-                    polyline = Polyline(line)
-                    geoms.append(polyline)
-                    if def_count > 0:
-                        fs = ",".join(vals)
-                        oid = row['objectid']
+                    if row['f_code'] in specificAttributeDict:
 
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[0],fs)
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[1],feat_lyr)
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[2],(domain_dict[row['f_code']]))
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[3],round(oid))
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[4],len(vals))
+                        vals = []
+                        for i in specificAttributeDict[row['f_code']]:
+                            vals.append(i)
 
-                    else:
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[0],'N/A')
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[1],feat_lyr)
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[2],(domain_dict[row['f_code']]))
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[3],round(oid))
-                        temp_result_df.set_value(idx_attr, TMP_FIELDS[4],len(vals))
+                        line = row['SHAPE']
+                        def_count = len(vals)
+                        polyline = Polyline(line)
+                        geoms.append(polyline)
+                        if def_count > 0:
+                            fs = ",".join(vals)
+                            oid = row['objectid']
 
-        attr_sdf = temp_result_df#SpatialDataFrame(temp_result_df, geometry=geoms)
+                            temp_result_df.set_value(idx_attr, TMP_FIELDS[0],fs)
+                            temp_result_df.set_value(idx_attr, TMP_FIELDS[1],feat_lyr)
+                            temp_result_df.set_value(idx_attr, TMP_FIELDS[2],(domain_dict[row['f_code']]))
+                            temp_result_df.set_value(idx_attr, TMP_FIELDS[3],round(oid))
+                            temp_result_df.set_value(idx_attr, TMP_FIELDS[4],len(vals))
 
-        df_current = attr_sdf
-        fcount = len(df_current)
+                        else:
+                            temp_result_df.set_value(idx_attr, TMP_FIELDS[0],'N/A')
+                            temp_result_df.set_value(idx_attr, TMP_FIELDS[1],feat_lyr)
+                            temp_result_df.set_value(idx_attr, TMP_FIELDS[2],(domain_dict[row['f_code']]))
+                            temp_result_df.set_value(idx_attr, TMP_FIELDS[3],round(oid))
+                            temp_result_df.set_value(idx_attr, TMP_FIELDS[4],len(vals))
 
-        error_field_count = err_cnt
-        error_field_def = err_def
+            attr_sdf = temp_result_df#SpatialDataFrame(temp_result_df, geometry=geoms)
 
-        errors = []
-        attrs = []
-        if fcount>0: #len(df_current) > 0:
-            errors += df_current[error_field_count].tolist()
-            def process(x):
-                return [va for va in x.replace(' ', '').split('|')[-1].split(',') if len(va) > 1]
-            for e in df_current[error_field_def].apply(process).tolist():
-                attrs += e
-                del e
+            df_current = attr_sdf
+            fcount = len(df_current)
 
-        results = get_answers(0,errors,attrs, fcount)
+            error_field_count = err_cnt
+            error_field_def = err_def
 
-        out_sdf.set_value(idx, field_schema.get('logc')[0], results[1])
-        out_sdf.set_value(idx, field_schema.get('logc')[1], results[2])
-        out_sdf.set_value(idx, field_schema.get('logc')[2], results[3])
-        out_sdf.set_value(idx, field_schema.get('logc')[3], results[4])
-        out_sdf.set_value(idx, field_schema.get('logc')[4], results[5])
-        out_sdf.set_value(idx, field_schema.get('logc')[5], results[6])
-        out_sdf.set_value(idx, field_schema.get('logc')[6], results[7])
-        out_sdf.set_value(idx, field_schema.get('logc')[7], results[8])
-        out_sdf.set_value(idx, field_schema.get('logc')[8], results[9])
-        out_sdf.set_value(idx, field_schema.get('logc')[9], results[10])
-        out_sdf.set_value(idx, field_schema.get('logc')[10], results[11])
-        out_sdf.set_value(idx, field_schema.get('logc')[11], results[12])
-        out_sdf.set_value(idx, field_schema.get('logc')[12], results[13])
-        out_sdf.set_value(idx, field_schema.get('logc')[13], results[14])
-        out_sdf.set_value(idx, field_schema.get('logc')[14], results[15])
-        out_sdf.set_value(idx, field_schema.get('logc')[15], results[16])
+            errors = []
+            attrs = []
+            if fcount>0: #len(df_current) > 0:
+                errors += df_current[error_field_count].tolist()
+                def process(x):
+                    return [va for va in x.replace(' ', '').split('|')[-1].split(',') if len(va) > 1]
+                for e in df_current[error_field_def].apply(process).tolist():
+                    attrs += e
+                    del e
+
+            results = get_answers(0,errors,attrs, fcount)
+
+            out_sdf.set_value(idx, field_schema.get('logc')[0], results[1])
+            out_sdf.set_value(idx, field_schema.get('logc')[1], results[2])
+            out_sdf.set_value(idx, field_schema.get('logc')[2], results[3])
+            out_sdf.set_value(idx, field_schema.get('logc')[3], results[4])
+            out_sdf.set_value(idx, field_schema.get('logc')[4], results[5])
+            out_sdf.set_value(idx, field_schema.get('logc')[5], results[6])
+            out_sdf.set_value(idx, field_schema.get('logc')[6], results[7])
+            out_sdf.set_value(idx, field_schema.get('logc')[7], results[8])
+            out_sdf.set_value(idx, field_schema.get('logc')[8], results[9])
+            out_sdf.set_value(idx, field_schema.get('logc')[9], results[10])
+            out_sdf.set_value(idx, field_schema.get('logc')[10], results[11])
+            out_sdf.set_value(idx, field_schema.get('logc')[11], results[12])
+            out_sdf.set_value(idx, field_schema.get('logc')[12], results[13])
+            out_sdf.set_value(idx, field_schema.get('logc')[13], results[14])
+            out_sdf.set_value(idx, field_schema.get('logc')[14], results[15])
+            out_sdf.set_value(idx, field_schema.get('logc')[15], results[16])
+
+        else:
+            results = (-1,-1,-1,-1,-1,-1,0,0,'N/A','N/A',0,0,0,0,0,-1)
+
+            out_sdf.set_value(idx, field_schema.get('logc')[0], results[0])
+            out_sdf.set_value(idx, field_schema.get('logc')[1], results[1])
+            out_sdf.set_value(idx, field_schema.get('logc')[2], results[2])
+            out_sdf.set_value(idx, field_schema.get('logc')[3], results[3])
+            out_sdf.set_value(idx, field_schema.get('logc')[4], results[4])
+            out_sdf.set_value(idx, field_schema.get('logc')[5], results[5])
+            out_sdf.set_value(idx, field_schema.get('logc')[6], results[6])
+            out_sdf.set_value(idx, field_schema.get('logc')[7], results[7])
+            out_sdf.set_value(idx, field_schema.get('logc')[8], results[8])
+            out_sdf.set_value(idx, field_schema.get('logc')[9], results[9])
+            out_sdf.set_value(idx, field_schema.get('logc')[10], results[10])
+            out_sdf.set_value(idx, field_schema.get('logc')[11], results[11])
+            out_sdf.set_value(idx, field_schema.get('logc')[12], results[12])
+            out_sdf.set_value(idx, field_schema.get('logc')[13], results[13])
+            out_sdf.set_value(idx, field_schema.get('logc')[14], results[14])
+            out_sdf.set_value(idx, field_schema.get('logc')[15], results[15])
 
     return out_sdf
 
@@ -571,10 +596,10 @@ def thematic_accuracy(out_sdf, df_list, f_thm_acc, them_gis, them_url):
 
             MSP = get_msp(scale=common) # SHOULD UPDATE MISSION_PLANNING FIELD
 
-            if not out_sdf['MEAN'][0]:
+            if not out_sdf['them_mean'][0]:
                 m = 0
             else:
-                m = out_sdf['MEAN'][0]
+                m = out_sdf['them_mean'][0]
 
             SCORE_VALUE = them_sdf['grls_score'].loc[0]#get_equal_breaks_score(m)# get_equal_breaks_score(output_features, ['MEAN','EQUAL']) # PUT SCORE IN EQUAL
 

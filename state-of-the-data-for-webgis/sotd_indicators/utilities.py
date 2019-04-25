@@ -551,7 +551,7 @@ def update_insert_features(results_fc, authoritative_fc, schema):
             insert_new_results(selected_auth_fl,overlp_res_fl, authoritative_fc, schema)
 
         if int(new_res_count) > 0:
-            print('There are ' + str(new_res_count) + ' Features that need inserting')
+            print('There are ' + str(new_res_count) + ' Features that need appending')
             append_new_results(new_results_fl, authoritative_fc)
 
     else:
@@ -562,9 +562,9 @@ def update_insert_features(results_fc, authoritative_fc, schema):
 # feature geometries already exist
 def insert_new_results(selected_auth_fl, selected_res_fl, authoritative_fc, schema):
     selected_auth_sdf = SpatialDataFrame.from_featureclass(selected_auth_fl)
-    print(len(selected_auth_sdf))
+    print(selected_auth_sdf)
     selected_res_sdf = SpatialDataFrame.from_featureclass(selected_res_fl)
-    print(len(selected_res_sdf))
+    print(selected_res_sdf)
 
     fields = field_schema.get(schema)
     #for f in fields:
@@ -577,7 +577,8 @@ def insert_new_results(selected_auth_fl, selected_res_fl, authoritative_fc, sche
     for idx, sel_auth_row in enumerate(selected_auth_sdf.iterrows()):
 
         geom = sel_auth_row[1].SHAPE.buffer(-.01)
-        oid = sel_auth_row[1].OBJECTID
+        #print(geom)
+        #oid = sel_auth_row[1].OBJECTID
 
         # print(oid)
 
@@ -593,21 +594,35 @@ def insert_new_results(selected_auth_fl, selected_res_fl, authoritative_fc, sche
             #['MEAN_CE90']
             for f in fields:
                 try:
+                    #print(f)
                     cur_val = df_current.loc[0].at[f]
                     #print(cur_val)
                     selected_auth_sdf.at[idx, f] = cur_val
+                    #print(f)
                 except:
                     # break
                     print("Field doesn't exist")
+            #print(df_current)
 
     insert_df = selected_auth_sdf.drop(['SHAPE'], axis=1, inplace=False)
 
+    print(insert_df)
+
     records = insert_df.to_records(index=False)
+
+    print(records)
 
     rows = np.array(records, dtype=dtypes)
 
+
     array = rows  # np.array(rows, dtypes)
-    da.ExtendTable(authoritative_fc, "OID@", array, "_ID", False)
+    #da.ExtendTable(authoritative_fc, "OID@", array, "_ID", False)
+    try:
+        print("trying _ID")
+        da.ExtendTable(authoritative_fc, "OID@", array, "_ID", False)
+    except:
+        print('Trying OBJECTID')
+        da.ExtendTable(authoritative_fc, "OID@", array, "OBJECTID", False)
 
     return authoritative_fc
 

@@ -53,9 +53,9 @@ def trace():
 #--------------------------------------------------------------------------
 class TemporalAccuracy(object):
     """performs temporal accuracy calculations on a given feature class"""
-    CURRENCY_FIELD = 'DOM_YEAR'
-    CD_SCORE = 'CD_SINCE_DOM_YEAR'
-    SCORE_FIELD = 'TEMP_ACC_SCORE'
+    CURRENCY_FIELD = 'dom_year'
+    CD_SCORE = 'cd_since_dom_year'
+    SCORE_FIELD = 'temp_acc_score'
     MINUS_2_SIGMA = 2.2
     MINUS_1_SIGMA = 15.8
     PLUS_1_SIGMA = 84.2
