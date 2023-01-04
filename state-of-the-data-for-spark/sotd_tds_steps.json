@@ -1,0 +1,30 @@
+[
+  {
+    "Type": "CUSTOM_JAR",
+    "Name": "Copy SOTD TDS Scala",
+    "ActionOnFailure": "CONTINUE",
+    "Jar": "command-runner.jar",
+    "Args": ["aws","s3","cp","@@@emr_configuration.s3_path_to_code@@@/tds_sotd_job.scala","///home/hadoop/tds_sotd_job.scala"]
+  },
+  {
+    "Type": "CUSTOM_JAR",
+    "Name": "Copy SOTD TDS CARTS Grid Post-SQL Scala",
+    "ActionOnFailure": "CONTINUE",
+    "Jar": "command-runner.jar",
+    "Args": ["aws","s3","cp","@@@emr_configuration.s3_path_to_code@@@/post_sql_tds_carts_grid.scala","///home/hadoop/post_sql_tds_carts_grid.scala"]
+  },
+  {
+    "Type": "CUSTOM_JAR",
+    "Name": "Run SOTD TDS Scala Job",
+    "ActionOnFailure": "CONTINUE",
+    "Jar": "command-runner.jar",
+    "Args": ["spark-shell","--conf","spark.sql.autoBroadcastJoinThreshold=@@@emr_configuration.autoBroadcastJoinThreshold@@@","--conf","spark.sql.broadcastTimeout=@@@emr_configuration.broadcastTimeout@@@","--jars","@@@emr_configuration.s3_path_to_code@@@/postgresql-42.2.23.jar","-I","///home/hadoop/tds_sotd_job.scala"]
+  },
+  {
+    "Type": "CUSTOM_JAR",
+    "Name": "Run TDS CARTS Grid Post-SQL Scala",
+    "ActionOnFailure": "CONTINUE",
+    "Jar": "command-runner.jar",
+    "Args": ["spark-shell","--conf","spark.sql.autoBroadcastJoinThreshold=@@@emr_configuration.autoBroadcastJoinThreshold@@@","--conf","spark.sql.broadcastTimeout=@@@emr_configuration.broadcastTimeout@@@","--jars","@@@emr_configuration.s3_path_to_code@@@/postgresql-42.2.23.jar","-I","///home/hadoop/post_sql_tds_carts_grid.scala"]
+  }
+]

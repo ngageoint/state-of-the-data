@@ -17,9 +17,6 @@ The National Geospatial-Intelligence Agency (NGA) desires to maintain a full und
   - Facilitates transparency of GEOINT through discoverability, accessibility and usability
 
 # The Toolbox and Scripts
-## state-of-the-data-for-webgis
-State of the Data for WebGIS is designed to work with features that have been service enabled as ArcGIS Feature Services. This set of tools uses the [ArcGIS API for Python](https://developers.arcgis.com/python/) to pull data that is served as feature services in a spatial dataframe, perform the state of the data analysis calculations, and output the data as a feature service.
-
 ## state-of-the-data-for-desktop
 State of the Data for Desktop is a set of ArcGIS Desktop Geoprocessing tools that can be used from ArcMap or ArcGIS Pro to process the State of the Data metrics for feature classes, feature layers, and shapefiles. There are two separate toolboxes. The **State of the Data.tbx** is intended for creating new State of the Data assessments. The **State of the Data Enterprise.tbx** is intened to work with data that can be updated withing an enterprise geodatabase.
 
@@ -72,18 +69,41 @@ This toolbox is a subset of the tools in the State of the Data toolbox that have
 ### Thematic Summary
 - Performs a statistical summary of a feature subtype or selected attribute
 
+## state-of-the-data-for-webgis
+State of the Data for WebGIS is designed to work with features that
+have been service enabled as ArcGIS Feature Services. This set 
+f tools uses the [ArcGIS API for Python](https://developers.arcgis.com/python/) to
+pull data that is served as feature services in a spatial dataframe, 
+perform the state of the data analysis calculations, and output 
+the data as a feature service.
+
+## state-of-the-data-for-production
+State of the Data for Production is a version of the state of the data tools that uses R-tree spatial indexing
+to improve processing times. The tools are intended for use with large datasets. The
+process first extracts a the geometry and fields of a feature class into 
+a R-tree spatial index file. Then the data is aggregated and processed into
+feature classes of positional accuracy, source lineage, currency, thematic 
+summary, and logical consistency.
+
+## state-of-the-data-for-spark
+State of the Data for Spark is a version of the state of the data tools
+that is optimized for processing big data from a relational database using a 
+spark cluster. This specific version of the tools is designed for use via 
+Amazon Web Services (AWS) Elastic MapReduce (EMR) and contains the batch 
+scripts to start up the EMR cluster, submit the state of the data scala 
+jobs, write the results to a relational database, and shutdown the cluster.
+
 # Installation and Use
-The State of the Data tools use Python and Esri's arcpy library. In order for the tools to run, ArcGIS Desktop verision 10.4+ or ArcGIS Pro 1.2+ must be installed. If that condition is met, you should be able to clone this repo and run the tools as ArcGIS geoprocessing tools through ArcMap  or ArcGIS Pro or as stand alone scripts.
+Each toolbox has a different use case. See the README.md files in each 
+folder for instructions on how to use the corresponding tools.
 
 # Points of Contact
 - Derek Silva (Derek.A.Silva@nga.mil)
 
 # Developers
-In aphabetical orther by last name:
+In alphabetical order by last name:
 - Gregory Brunner (gbrunner@esri.com)
-- Andrew Chapkowski (achapkowski@esri.com)
-- Tim Hollingshead (thollingshead@esri.com)
-- Jeff Scarmazzi (jscarmazzi@esri.com)
+- Thomas Harner (tharner@esri.com)
 - Todd Wever (twever@esri.com)
 
 # Contributing

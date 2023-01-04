@@ -1,0 +1,30 @@
+[
+  {
+    "Type": "CUSTOM_JAR",
+    "Name": "Copy SOTD MGCP Scala",
+    "ActionOnFailure": "CONTINUE",
+    "Jar": "command-runner.jar",
+    "Args": ["aws","s3","cp","@@@emr_configuration.s3_path_to_code@@@/mgcp_sotd_job.scala","///home/hadoop/mgcp_sotd_job.scala"]
+  },
+  {
+    "Type": "CUSTOM_JAR",
+    "Name": "Copy SOTD MGCP CARTS Post-SQL Scala",
+    "ActionOnFailure": "CONTINUE",
+    "Jar": "command-runner.jar",
+    "Args": ["aws","s3","cp","@@@emr_configuration.s3_path_to_code@@@/post_sql_mgcp_carts.scala","///home/hadoop/post_sql_mgcp_carts.scala"]
+  },
+  {
+    "Type": "CUSTOM_JAR",
+    "Name": "Run MGCP SOTD TDS Scala Job",
+    "ActionOnFailure": "CONTINUE",
+    "Jar": "command-runner.jar",
+    "Args": ["spark-shell","--conf","spark.sql.autoBroadcastJoinThreshold=@@@emr_configuration.autoBroadcastJoinThreshold@@@","--conf","spark.sql.broadcastTimeout=@@@emr_configuration.broadcastTimeout@@@","--jars","@@@emr_configuration.s3_path_to_code@@@/postgresql-42.2.23.jar","-I","///home/hadoop/mgcp_sotd_job.scala"]
+  },
+  {
+    "Type": "CUSTOM_JAR",
+    "Name": "Run MGCP CARTS Post-SQL Scala",
+    "ActionOnFailure": "CONTINUE",
+    "Jar": "command-runner.jar",
+    "Args": ["spark-shell","--conf","spark.sql.autoBroadcastJoinThreshold=@@@emr_configuration.autoBroadcastJoinThreshold@@@","--conf","spark.sql.broadcastTimeout=@@@emr_configuration.broadcastTimeout@@@","--jars","@@@emr_configuration.s3_path_to_code@@@/postgresql-42.2.23.jar","-I","///home/hadoop/post_sql_mgcp_carts.scala"]
+  }
+]
