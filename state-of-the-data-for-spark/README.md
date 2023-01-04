@@ -10,7 +10,7 @@ jobs, write the results to a relational database, and shutdown the cluster.
 
 * [Overview](#overview)
 * [Batch File](#batch-file)
-* [Steps.json](#steps.json)
+* [Steps.json](#steps-json)
 * [Scala](#scala)
 * [SQL](#sql)
 
@@ -57,7 +57,7 @@ output database tables and corresponding schemas.
 Finally, the EMR steps are submitted to the cluster. These [EMR steps](#steps.json) 
 will process state of the data metrics for both TDS and MGCP.
 
-## Steps.json
+## Steps JSON
 The steps JSON files are the steps that are submitted to the EMR cluster.
 They are formatted as JSON because EMR translates the JSON into a command.
 For example, to tell EMR to copy a file, you submit the following *step*.
