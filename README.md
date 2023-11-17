@@ -103,7 +103,6 @@ folder for instructions on how to use the corresponding tools.
 # Developers
 In alphabetical order by last name:
 - Gregory Brunner (gbrunner@esri.com)
-- Thomas Harner (tharner@esri.com)
 - Todd Wever (twever@esri.com)
 
 # Contributing
